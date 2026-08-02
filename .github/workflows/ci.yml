@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install (zero-dep core + pytest)
+        run: pip install -e ".[test]"
+      - name: Guard the zero-dependency invariant
+        run: |
+          python - <<'EOF'
+          import importlib.metadata as md
+          deps = md.requires("terse-net") or []
+          runtime = [d for d in deps if "extra ==" not in d]
+          assert not runtime, f"runtime deps crept in: {runtime}"
+          print("zero runtime dependencies: OK")
+          EOF
+      - name: Tests (behavioral + byte-parity vs frozen baseline)
+        run: pytest

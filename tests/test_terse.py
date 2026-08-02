@@ -1,0 +1,265 @@
+"""Behavioral suite for the incubated ``terse`` package.
+
+This is the suite that moves to the standalone repository at split time:
+it exercises the package directly (not the the dbcli shim
+shim — the historical file the dbcli repo keeps
+covering that import path) and pins the frozen 0.1.0 public API:
+``render() -> [Candidate]``, ``optimize()``, ``register()``,
+``iter_compressors()``.
+"""
+from __future__ import annotations
+
+import dataclasses
+import re
+
+import pytest
+
+from terse import (
+    Candidate,
+    __version__,
+    iter_compressors,
+    optimize,
+    register,
+    render,
+)
+from terse import _compressors
+
+from .corpus import (
+    BRIEF,
+    COMMAND_FIXTURES,
+    COUNTERS_ERRORS,
+    DASHES,
+    EIGRP,
+    IOS_INTF_DETAIL,
+    IP_ROUTE,
+    NXOS_INTF_DETAIL,
+    NXOS_INTF_DOWN,
+    PORTCHANNEL,
+    STATUS,
+)
+
+
+# ===========================================================================
+# Frozen public API surface
+# ===========================================================================
+
+def test_version_and_exports():
+    assert __version__ == "0.1.0"
+    assert callable(optimize) and callable(render) and callable(register)
+    assert callable(iter_compressors)
+
+
+def test_candidate_is_frozen_with_estimates():
+    c = Candidate(text="abcd" * 10, method="toon", source="fn")
+    assert c.est_chars == 40
+    assert c.est_tokens() == 10
+    assert c.est_tokens(chars_per_token=2) == 20
+    assert c.dropped_fields is None  # undeclared (legacy) — not "nothing dropped"
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        c.text = "mutated"  # type: ignore[misc]
+
+
+def test_render_empty_output_returns_no_candidates():
+    assert render("", command="show interface status") == []
+
+
+def test_render_unknown_command_returns_no_candidates():
+    assert render("some output", command="show something weird") == []
+
+
+def test_render_reserved_parameters_accepted_and_inert():
+    plain = render(IP_ROUTE, command="show ip route")
+    reserved = render(
+        IP_ROUTE,
+        command="show ip route",
+        platform="cisco_nxos",
+        parsed=[{"prefix": "10.1.1.0/24"}],
+        profile="brief",
+    )
+    assert [c.text for c in plain] == [c.text for c in reserved]
+
+
+@pytest.mark.parametrize(
+    "label,command,body",
+    [pytest.param(*f, id=f[0]) for f in COMMAND_FIXTURES],
+)
+def test_optimize_equals_min_render(label, command, body):
+    """The convenience wrapper is exactly 'first smallest candidate or raw'."""
+    candidates = render(body, command=command)
+    expected = (
+        min(candidates, key=lambda c: len(c.text)).text if candidates else body
+    )
+    assert optimize(command, body) == expected
+    for c in candidates:
+        assert 0 < len(c.text) < len(body)
+        assert c.method == "toon"
+        assert c.source
+
+
+def test_register_plugin_roundtrip_and_failopen():
+    saved = list(_compressors._COMPRESSORS)
+    try:
+        @register(r"^fake\s+plugin\s+cmd$")
+        def _boom(_raw: str) -> str:
+            raise ValueError("plugin bug")
+
+        @register(r"^fake\s+plugin\s+cmd$")
+        def _tiny(_raw: str) -> str:
+            return "TINY"
+
+        out = render("x" * 100, command="fake plugin cmd")
+        assert [c.text for c in out] == ["TINY"]      # raiser dropped, fail-open
+        assert out[0].source == "_tiny"
+        assert optimize("fake plugin cmd", "x" * 100) == "TINY"
+    finally:
+        _compressors._COMPRESSORS[:] = saved
+
+
+def test_iter_compressors_is_a_snapshot_of_pairs():
+    snap = iter_compressors()
+    assert isinstance(snap, tuple)
+    assert len(snap) == len(_compressors._COMPRESSORS) >= 15
+    for pattern, fn in snap:
+        assert isinstance(pattern, re.Pattern)
+        assert callable(fn)
+
+
+# ===========================================================================
+# Ported behavioral tests (historical suite, package import path)
+# ===========================================================================
+
+def test_counter_errors_keeps_only_nonzero_rows():
+    out = optimize("show interface counters errors", COUNTERS_ERRORS)
+    assert "Eth1/37,0,6,0,6,0,0" in out
+    assert "Eth1/39,0,2064,0,2064,0,0" in out
+    assert "\nmgmt0," not in out
+    assert "\nEth1/1," not in out
+
+
+def test_counter_errors_all_zero_table_marked():
+    out = optimize("show interface counters errors", COUNTERS_ERRORS)
+    assert "Single-Col" in out
+    assert "(all zero)" in out
+
+
+def test_counter_errors_shrinks_and_drops_separators():
+    out = optimize("show interface counters errors", COUNTERS_ERRORS)
+    assert len(out) < len(COUNTERS_ERRORS)
+    assert DASHES not in out
+
+
+def test_counter_errors_failopen_without_header():
+    raw = "no port table here\njust noise"
+    assert optimize("show interface counters errors", raw) == raw
+
+
+def test_interface_status_csv_header_and_rows():
+    out = optimize("show interface status", STATUS)
+    lines = out.splitlines()
+    assert lines[0] == "port,name,status,vlan,duplex,speed,type"
+    assert "Eth1/11,RSRFF206 Twe1/0/3,connected,routed,full,10G,10Gbase-SR" in lines
+    assert "Eth1/45,RFRA3213-Eth1/48,connected,routed,full,10G,10Gbase-LR" in lines
+    assert "Po101,MFS4163-Po101,connected,trunk,full,10G,--" in lines
+
+
+def test_interface_status_preserves_names_with_spaces():
+    assert "RSRFF206 Twe1/0/3" in optimize("show interface status", STATUS)
+
+
+def test_interface_status_drops_separators_and_repeated_headers():
+    out = optimize("show interface status", STATUS)
+    assert DASHES not in out
+    assert out.count("port,name,status") == 1
+    assert len(out) < len(STATUS)
+
+
+def test_interface_status_per_interface_variant_matches():
+    out = optimize("show interface ethernet1/11 status", STATUS)
+    assert out.startswith("port,name,status")
+
+
+def test_interface_brief_csv_and_wrapped_header_dropped():
+    out = optimize("show interface ethernet1/9 brief", BRIEF)
+    lines = out.splitlines()
+    assert lines[0] == "interface,vlan,type,mode,status,reason,speed,port_ch"
+    assert "Eth1/9,1,eth,access,down,Administratively down,auto(D),--" in lines
+    assert "\nInterface," not in out
+    assert DASHES not in out
+
+
+def test_nxos_interface_detail_extracts_key_fields():
+    out = optimize("show interface ethernet1/45", NXOS_INTF_DETAIL)
+    assert out.startswith("Ethernet1/45")
+    assert "status=up/up" in out
+    assert 'desc="RFRA3213-Eth1/48"' in out
+    assert "mtu=1500" in out
+    assert "bw=10000000Kbit" in out
+    assert "duplex=full/10" in out
+    assert "crc=48" in out
+    assert len(out) < len(NXOS_INTF_DETAIL) * 0.5
+
+
+def test_nxos_interface_down_with_reason():
+    out = optimize("show interface ethernet1/9", NXOS_INTF_DOWN)
+    assert out.startswith("Ethernet1/9")
+    assert "status=down/down" in out
+    assert 'reason="Administratively down"' in out
+    assert 'desc="FREE"' in out
+    assert len(out) < len(NXOS_INTF_DOWN) * 0.6
+
+
+def test_ios_interface_detail_still_works():
+    out = optimize("show interfaces GigabitEthernet0/1", IOS_INTF_DETAIL)
+    assert out.startswith("GigabitEthernet0/1")
+    assert "status=up/up" in out
+    assert "crc=2" in out
+
+
+def test_eigrp_neighbors_csv():
+    out = optimize("show ip eigrp neighbors", EIGRP)
+    lines = out.splitlines()
+    assert lines[0].startswith("IP-EIGRP neighbors for process 190")
+    assert lines[1] == "h,address,interface,hold,uptime,srtt,rto,q,seq"
+    assert "5,192.168.13.85,Eth1/38,11,11w6d,1,50,0,549000" in lines
+    assert "Cnt Num" not in out
+    assert len(out) < len(EIGRP)
+
+
+def test_eigrp_neighbors_vrf_all_command_matches():
+    out = optimize("show ip eigrp neighbors vrf all", EIGRP)
+    assert "h,address,interface,hold,uptime,srtt,rto,q,seq" in out
+
+
+def test_portchannel_summary_drops_legend():
+    out = optimize("show port-channel summary", PORTCHANNEL)
+    lines = out.splitlines()
+    assert lines[0] == "group,port_channel,type,protocol,member_ports"
+    assert "101,Po101(SU),Eth,LACP,Eth1/42(P) Eth1/43(P)" in lines
+    assert "Hot-standby" not in out
+    assert "BFD Session Wait" not in out
+    assert len(out) < len(PORTCHANNEL) * 0.6
+
+
+def test_optimize_tries_all_and_keeps_smallest():
+    saved = list(_compressors._COMPRESSORS)
+    try:
+        _compressors._COMPRESSORS.append((re.compile(r"^fakecmd$"), lambda r: r[:20]))
+        _compressors._COMPRESSORS.append((re.compile(r"^fakecmd$"), lambda r: "TINY"))
+        _compressors._COMPRESSORS.append((re.compile(r"^fakecmd$"), lambda r: r + "X"))
+        assert optimize("fakecmd", "x" * 100) == "TINY"
+    finally:
+        _compressors._COMPRESSORS[:] = saved
+
+
+def test_unknown_command_returns_raw():
+    raw = "some totally unstructured output"
+    assert optimize("show something weird", raw) == raw
+
+
+def test_empty_output_returns_empty():
+    assert optimize("show interface status", "") == ""
+
+
+def test_ios_ip_route_still_compresses():
+    out = optimize("show ip route", IP_ROUTE)
+    assert "proto,prefix,ad/metric,next_hop,interface" in out
