@@ -1,0 +1,154 @@
+# terse — design, topology, and plan
+
+*Status: Phase 1 shipped. This document is the project's source of truth
+for architecture and roadmap; decisions recorded here are binding until a
+new entry supersedes them.*
+
+## The problem
+
+LLM network agents pay for every character a `show` command returns.
+Vendor CLI output is built for humans on 80-column terminals: separator
+dashes, static legends, wrapped headers, all-zero counter tables, keys
+repeated per row. On big tables this noise doesn't just cost tokens — it
+overflows tool-output caps, so the model sees a *truncated* table and
+reasons over missing rows. terse rewrites device output into the smallest
+faithful representation before it enters model context.
+
+## Topology
+
+```
+                       consumer (dbcli, NetClaw, your agent, …)
+                                        │ raw CLI text, command,
+                                        │ platform?, parsed rows?, profile?
+                                        ▼
+        ┌───────────────────────────── terse ─────────────────────────────┐
+        │                                                                 │
+        │  registry.py — ONE canonical-order list of Entry:               │
+        │    (command pattern, fn, platform scope?, dropped_fields?)      │
+        │                                                                 │
+        │  ┌── data tier ─────────────────┐  ┌── code tier ─────────────┐ │
+        │  │ specs.py: plain-dict specs   │  │ _compressors.py: hand-   │ │
+        │  │ engine.py: generic           │  │ written functions for    │ │
+        │  │ strategies compile specs     │  │ genuinely stateful       │ │
+        │  │ into compressors             │  │ formats (multi-line      │ │
+        │  │  · line_regex_table          │  │ blocks, banner state     │ │
+        │  │  · fixed_width_table         │  │ machines, multi-table    │ │
+        │  │  · (Phase 2: kv_extract,     │  │ zero-row suppression)    │ │
+        │  │     projection encoders)     │  │                          │ │
+        │  └──────────────────────────────┘  └──────────────────────────┘ │
+        │                                                                 │
+        │  render() → [Candidate(text, method, source, dropped_fields)]   │
+        │  every path FAIL-OPEN · candidates only ever shrink             │
+        └────────────────────────────────┬────────────────────────────────┘
+                                         ▼
+                     consumer policy: smallest-wins, ledgers,
+                     metrics, caching — deliberately NOT ours
+```
+
+Two tiers, one contract. The **data tier** scales by contribution — a new
+table-shaped command family is a spec dict plus fixtures, no parser code.
+The **code tier** is the honest escape hatch: some formats (NX-OS splits
+interface state across two lines; banners need a skip-until-sentinel state
+machine) cannot be expressed by a flat spec without inventing a bad
+programming language in data. TextFSM already exists; we don't re-invent
+it badly.
+
+## The API contract (frozen)
+
+```python
+render(raw, *, command, platform=None, parsed=None, profile="default")
+    -> list[Candidate]
+optimize(command, raw) -> str          # == min(render(...)) or raw
+register(pattern, *, platforms=None, dropped_fields=None)   # plugin hatch
+iter_compressors() / iter_entries()    # registry views
+```
+
+* `platform` (active): skip-filter over declared platform scopes. It can
+  only ever *skip* entries, never force a match — omitting it is always
+  safe. This is the false-match killer: an NX-OS table spec no longer
+  claims Arista output when the caller says `platform="arista_eos"`.
+* `parsed` (reserved, Phase 2): rows already produced by Genie /
+  ntc-templates / TTP / NAPALM / gNMI, to be projected and re-encoded
+  compactly (header-once tabular — CSV and, where it wins, TOON-format).
+* `profile` (reserved, Phase 2): named, *declared-lossy* projections
+  (e.g. `updown` keeping only Port+Status). Renderings under a non-default
+  profile append an inline omission marker
+  (`[omitted: … — re-query profile=full]`) so the model knows data was
+  withheld and can recover. Default profile stays complete-but-compact.
+
+## Invariants (enforced, not aspirational)
+
+1. **Fail-open everywhere.** Exception, non-string, empty, or
+   non-shrinking result → no candidate. Raw is never lost, output never
+   enlarged. Enforced in `render()`, re-tested per compressor.
+2. **Zero runtime dependencies.** Stdlib only; CI asserts the installed
+   dist metadata carries no runtime requirements. This is why specs are
+   plain dicts — no YAML/TOML parser at runtime. An optional authoring
+   front-end (YAML → dict) may land later as an extra, feeding the same
+   engine.
+3. **Candidates, not policy.** Winner selection, savings ledgers,
+   metrics, caching, and delta re-query logic belong to consumers (dbcli
+   keeps its smallest-wins seam, Prometheus counters, and per-run ledger).
+4. **Declared lossiness.** Noise (separators, legends, repeated headers,
+   all-zero rows kept visible via `(all zero)` markers) is dropped
+   freely. Anything data-bearing a rendering omits is declared on the
+   entry's `dropped_fields` manifest and surfaced on every candidate.
+   Manifest vocabulary so far: real field names (`ok`, `method`,
+   `holdtime`, `msgrcvd`…) plus structural drops (`hit_counters`,
+   `all_zero_rows`, `banner_bodies`, `unmatched_lines`,
+   `zero_valued_error_counters`).
+5. **Byte-parity discipline.** `tests/legacy_snapshot.py` freezes the
+   pre-extraction implementation. The parity suite replays a corpus
+   cross-matrix (every command × every body, wrong pairings included)
+   and pins today's outputs byte-for-byte on the default path. Engine
+   refactors change *how*, never *what*; an intentional output change is
+   a recorded baseline decision in this file.
+
+## Plan
+
+| Phase | Contents | Status |
+|---|---|---|
+| 0 | Extract from dbcli verbatim; freeze API (`render`/`Candidate`/`optimize`/`register`); parity baseline + cross-matrix suite; zero-dep packaging | ✅ shipped |
+| 1 | Spec engine (generic strategies over dict specs); 9/15 families converted; platform-keyed dispatch; lossiness manifests on every entry | ✅ shipped (0.2.0) |
+| 2 | **Parsed tier**: `parsed=` accepts pre-parsed rows → field projection + compact encoders (CSV; TOON-format where it wins); opt-in `profile=` projections with inline omission markers; `kv_extract` strategy to move `show version`-style scans to specs | ▢ next |
+| 3 | **Community launch**: PyPI release (`terse-net`; PEP 541 request for `terse`), fixture-per-file contribution layout, `terse audit` coverage tool (port of dbcli's run analyzer), CI token-savings regression with a pinned tokenizer, multi-vendor expansion (Arista EOS, Juniper Junos, Aruba, MikroTik) | ▢ |
+| 4 | dbcli (and other consumers) swap their vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ▢ |
+
+### Why the parsed tier is the coverage unlock
+
+Per-command raw compressors re-do work the parsing ecosystems finished
+years ago. ntc-templates and Genie ship thousands of per-vendor/command
+parsers; once output is *structured*, minimum-token rendering is a
+generic transform (project fields → header-once table). One good encoder
+instantly covers every command those parsers handle, across vendors,
+with zero per-command work here. The raw tier then serves the
+unparseable tail — piped/filtered commands, platforms without templates,
+and outputs where parsed JSON is *bigger* than compressed raw (common:
+JSON repeats keys per row). Both tiers emit candidates; the consumer's
+smallest-wins picks per call. This is why terse complements rather than
+competes with the parser projects.
+
+## Decision log
+
+| # | Decision | Rationale |
+|---|---|---|
+| 1 | Name: repo/import `terse`, distribution `terse-net` | PyPI `terse` is squatted by an abandoned 2019 package; PEP 541 transfer is a later option. "TOON"-adjacent names rejected — toon-format owns that word. |
+| 2 | Apache-2.0 | Parity with the ecosystem we lean on (ntc-templates, pyATS); patent grant. Swappable until the first external contribution. |
+| 3 | Specs are plain Python dicts, not YAML | Zero-dep invariant beats authoring aesthetics. A YAML front-end can compile to dicts later as an optional extra without touching the engine. |
+| 4 | Code tier is a feature, not debt | Stateful formats expressed "declaratively" just re-invent TextFSM in worse syntax. The escape hatch keeps specs honest and small. |
+| 5 | Platform filter can only skip, never force | Fail-open: a wrong/unknown platform string degrades to "try everything", never to "lose data". Declare scopes broadly. |
+| 6 | Manifests are metadata in Phase 1; inline markers wait for profiles | Appending marker text today would break byte-parity with the baseline for zero consumer benefit; markers become meaningful when opt-in lossy profiles exist. |
+| 7 | Canonical registry order frozen to the legacy sequence | Winner ties (equal-length candidates) resolve to the first entry; frozen order makes byte-parity unconditional instead of probabilistic. |
+| 8 | Tokenizers are CI-only, never runtime | `est_tokens()` is chars/4 by convention (matches dbcli's metric). Real tokenizer savings-regression lands in Phase 3 CI. |
+| 9 | Baseline corpus lives in `tests/corpus.py` as strings | One import, no I/O in unit tests. File-per-fixture layout arrives with the Phase-3 contribution flow and the audit tool that generates them. |
+
+## Provenance
+
+terse began as dbcli's TOON optimizer ("Token-Optimized Output for
+Networks", `dbcli/services/token_optimizer.py`, inspired by NetClaw's
+TOON serialization work) and was extracted in two recorded steps: Phase 0
+froze the API and proved byte-equivalence against the in-tree
+implementation; this repository's `tests/legacy_snapshot.py` is that
+frozen module and remains the standing acceptance baseline. dbcli
+currently vendors an identical copy (`dbcli/_incubator/showbrief`) and
+swaps to the pip dependency in Phase 4.
