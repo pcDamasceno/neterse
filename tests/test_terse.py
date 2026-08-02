@@ -1,11 +1,10 @@
-"""Behavioral suite for the incubated ``terse`` package.
+"""Behavioral suite for the ``terse`` package.
 
-This is the suite that moves to the standalone repository at split time:
-it exercises the package directly (not the the dbcli shim
-shim — the historical file the dbcli repo keeps
-covering that import path) and pins the frozen 0.1.0 public API:
-``render() -> [Candidate]``, ``optimize()``, ``register()``,
-``iter_compressors()``.
+Pins the public API surface (``render() -> [Candidate]``, ``optimize()``,
+``register()``, ``iter_compressors()``) and the behavior of every
+compressor family, spec-built and hand-written alike. The byte-parity
+sweep against the pre-extraction baseline lives in ``test_parity.py``;
+engine/platform/manifest specifics live in ``test_engine.py``.
 """
 from __future__ import annotations
 
@@ -22,7 +21,7 @@ from terse import (
     register,
     render,
 )
-from terse import _compressors
+from terse import registry
 
 from .corpus import (
     BRIEF,
@@ -44,7 +43,7 @@ from .corpus import (
 # ===========================================================================
 
 def test_version_and_exports():
-    assert __version__ == "0.1.0"
+    assert __version__ == "0.2.0"
     assert callable(optimize) and callable(render) and callable(register)
     assert callable(iter_compressors)
 
@@ -67,7 +66,10 @@ def test_render_unknown_command_returns_no_candidates():
     assert render("some output", command="show something weird") == []
 
 
-def test_render_reserved_parameters_accepted_and_inert():
+def test_reserved_parameters_and_matching_platform_keep_output():
+    """``parsed``/``profile`` are reserved (inert); a MATCHING platform
+    string must not change the result either — the filter only ever skips
+    non-matching entries (mismatch behavior is pinned in test_engine.py)."""
     plain = render(IP_ROUTE, command="show ip route")
     reserved = render(
         IP_ROUTE,
@@ -97,7 +99,7 @@ def test_optimize_equals_min_render(label, command, body):
 
 
 def test_register_plugin_roundtrip_and_failopen():
-    saved = list(_compressors._COMPRESSORS)
+    saved = list(registry.REGISTRY)
     try:
         @register(r"^fake\s+plugin\s+cmd$")
         def _boom(_raw: str) -> str:
@@ -112,13 +114,13 @@ def test_register_plugin_roundtrip_and_failopen():
         assert out[0].source == "_tiny"
         assert optimize("fake plugin cmd", "x" * 100) == "TINY"
     finally:
-        _compressors._COMPRESSORS[:] = saved
+        registry.REGISTRY[:] = saved
 
 
 def test_iter_compressors_is_a_snapshot_of_pairs():
     snap = iter_compressors()
     assert isinstance(snap, tuple)
-    assert len(snap) == len(_compressors._COMPRESSORS) >= 15
+    assert len(snap) == len(registry.REGISTRY) >= 15
     for pattern, fn in snap:
         assert isinstance(pattern, re.Pattern)
         assert callable(fn)
@@ -241,14 +243,14 @@ def test_portchannel_summary_drops_legend():
 
 
 def test_optimize_tries_all_and_keeps_smallest():
-    saved = list(_compressors._COMPRESSORS)
+    saved = list(registry.REGISTRY)
     try:
-        _compressors._COMPRESSORS.append((re.compile(r"^fakecmd$"), lambda r: r[:20]))
-        _compressors._COMPRESSORS.append((re.compile(r"^fakecmd$"), lambda r: "TINY"))
-        _compressors._COMPRESSORS.append((re.compile(r"^fakecmd$"), lambda r: r + "X"))
+        register(r"^fakecmd$")(lambda r: r[:20])   # medium
+        register(r"^fakecmd$")(lambda r: "TINY")    # smallest
+        register(r"^fakecmd$")(lambda r: r + "X")   # longer (ignored)
         assert optimize("fakecmd", "x" * 100) == "TINY"
     finally:
-        _compressors._COMPRESSORS[:] = saved
+        registry.REGISTRY[:] = saved
 
 
 def test_unknown_command_returns_raw():

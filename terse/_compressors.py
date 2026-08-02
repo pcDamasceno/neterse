@@ -1,106 +1,94 @@
-"""Compressor registry — the raw-text tier of terse.
+"""Hand-written compressors — the code tier of the registry.
 
-Each compressor targets one ``show``-command family and rewrites its
-verbose CLI output into a dense CSV / key=value rendering that preserves
-the semantically relevant data (inspired by the TOON approach from
-NetClaw). Ported verbatim from ``dbcli/services/token_optimizer.py`` in
-Phase 0 of the community-library plan; registry order is load-bearing
-for winner selection and must not be reshuffled.
+Since Phase 1, table-shaped command families live as declarative specs
+(``specs.py``) compiled by the engine; what remains here is the small set
+of genuinely stateful formats a flat spec cannot express faithfully —
+multi-line interface-detail blocks (NX-OS splits state across lines),
+field scans, banner state machines, and multi-table zero-row suppression —
+plus the fixed-width helpers the engine reuses. Registration order lives
+in ``registry.py``; nothing self-registers here.
 
-Only the standard library may be imported here — this module is the
-zero-dependency leaf of the package, and intra-package imports must stay
-relative so the package survives extraction into its own repository
-unchanged.
+Only the standard library may be imported — this module stays the
+zero-dependency leaf of the package. Function bodies are byte-parity
+pinned against the pre-extraction baseline by the test suite.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Callable, Optional
+from typing import Optional
 
 # ---------------------------------------------------------------------------
-# Registry
+# Shared helpers (used by code compressors AND the spec engine)
 # ---------------------------------------------------------------------------
 
-# A compressor takes raw CLI output and returns a (hopefully smaller) rendering.
-Compressor = Callable[[str], str]
-
-_COMPRESSORS: list[tuple[re.Pattern, Compressor]] = []
-
-
-def _register(pattern: str):
-    """Decorator — bind a compressor function to a command regex."""
-    compiled = re.compile(pattern, re.IGNORECASE)
-
-    def decorator(fn: Compressor) -> Compressor:
-        _COMPRESSORS.append((compiled, fn))
-        return fn
-
-    return decorator
-
-
-# ---------------------------------------------------------------------------
-# Compressors
-# ---------------------------------------------------------------------------
-
-# ---- show ip route / show ip route vrf <name> ----------------------------
-
-_ROUTE_LINE = re.compile(
-    r"""
-    ^[\s*>]*                          # selection markers
-    ([A-Z*]\S*)\s+                    # protocol code (O, B, S, C, O IA, …)
-    (\d+\.\d+\.\d+\.\d+/?\d*)\s+     # prefix
-    (?:\[(\d+/\d+)\])?\s*             # admin/metric  [110/20]
-    (?:via\s+(\S+))?                  # next-hop
-    [,\s]*(?:(\S+))?                  # egress interface
-    """,
-    re.VERBOSE,
+# Interface names across IOS / NX-OS / Catalyst — used to tell a data row from
+# a header, legend or continuation line in a fixed-width table.
+_IFACE_NAME_RE = re.compile(
+    r"^(?:mgmt|eth(?:ernet)?|po(?:rt-channel)?|vlan|lo(?:opback)?|nve|"
+    r"tun(?:nel)?|gi\w*|te\w*|twe\w*|fo\w*|hu\w*|fa\w*)\d",
+    re.IGNORECASE,
 )
 
 
-@_register(r"show\s+ip\s+route")
-def _compress_ip_route(raw: str) -> str:
+def _csv_row(fields: list) -> str:
+    """Join *fields* as one CSV row, quoting only when a field carries a comma
+    or quote (device ``Name`` columns hold spaces but rarely commas)."""
+    out = []
+    for f in fields:
+        if ("," in f) or ('"' in f):
+            f = '"' + f.replace('"', '""') + '"'
+        out.append(f)
+    return ",".join(out)
+
+
+def _fixed_width_rows(raw: str, keywords: list) -> Optional[list]:
+    """Parse a fixed-width table whose columns start at the ``keywords`` header.
+
+    NX-OS status/brief tables pad columns and let a ``Name`` / ``Reason`` field
+    carry spaces, so a plain whitespace split corrupts them. Instead we find the
+    header line, record each column's start offset, and slice every data row at
+    those offsets. Header, dashed-separator and wrapped-continuation lines are
+    skipped; only lines whose first column is an interface name are kept.
+    Returns ``None`` when the header is absent (caller falls back to raw).
+    """
     lines = raw.splitlines()
-    rows: list[str] = ["proto,prefix,ad/metric,next_hop,interface"]
-    for line in lines:
-        m = _ROUTE_LINE.match(line.strip())
-        if m:
-            proto, prefix, metric, nh, intf = m.groups()
-            rows.append(
-                f"{proto},{prefix},{metric or ''},{nh or ''},{intf or ''}"
-            )
-    if len(rows) < 2:
-        return raw
-    return "\n".join(rows)
+    positions: Optional[list] = None
+    start = 0
+    for i, line in enumerate(lines):
+        if not all(kw in line for kw in keywords):
+            continue
+        pos: list = []
+        last = -1
+        ok = True
+        for kw in keywords:
+            p = line.find(kw)
+            if p <= last:
+                ok = False
+                break
+            pos.append(p)
+            last = p
+        if ok:
+            positions = pos
+            start = i + 1
+            break
+    if not positions:
+        return None
+    bounds = positions + [10 ** 6]
+    rows: list = []
+    for line in lines[start:]:
+        if not line.strip() or set(line.strip()) <= {"-"}:
+            continue
+        head = line[bounds[0]:bounds[1]].split()
+        if not head or not _IFACE_NAME_RE.match(head[0]):
+            continue
+        rows.append([line[bounds[k]:bounds[k + 1]].strip() for k in range(len(positions))])
+    return rows
 
 
-# ---- show ip interface brief / show ip int brief -------------------------
-
-_INTF_BRIEF_LINE = re.compile(
-    r"^(\S+)\s+"              # interface
-    r"(\d+\.\d+\.\d+\.\d+|unassigned)\s+"  # IP
-    r"(YES|NO)\s+"            # OK?
-    r"(\S+)\s+"               # method
-    r"(\S+)\s+"               # status
-    r"(\S+)",                 # protocol
-)
-
-
-@_register(r"show\s+ip\s+int(?:erface)?\s+brief")
-def _compress_intf_brief(raw: str) -> str:
-    lines = raw.splitlines()
-    rows: list[str] = ["interface,ip,status,protocol"]
-    for line in lines:
-        m = _INTF_BRIEF_LINE.match(line.strip())
-        if m:
-            intf, ip, _ok, _method, status, proto = m.groups()
-            rows.append(f"{intf},{ip},{status},{proto}")
-    if len(rows) < 2:
-        return raw
-    return "\n".join(rows)
-
-
-# ---- show interfaces (full) ---------------------------------------------
+# ---------------------------------------------------------------------------
+# show interfaces (per-interface detail, IOS + NX-OS)
+# ---------------------------------------------------------------------------
 
 _INTF_HEADER = re.compile(r"^(\S+)\s+is\s+(administratively\s+)?(up|down),\s+line protocol is\s+(up|down)")
 # NX-OS splits the IOS one-liner across two lines: "EthX is up" (oper/link
@@ -121,18 +109,8 @@ _INTF_CRC = re.compile(r"(\d+)\s+CRC")
 _INTF_DESCRIPTION = re.compile(r"Description:\s+(.+)")
 
 
-@_register(
-    # Per-interface DETAIL only. Exclude the sub-commands (status / brief /
-    # counters / transceiver / ...) whose output is a table, not "X is up,
-    # line protocol is up" blocks — those have their own compressors, and
-    # letting this one claim them produced silent 0%% no-ops on NX-OS.
-    r"^show\s+int(?:erface|erfaces)?"
-    r"(?:\s+(?!status\b|brief\b|counters?\b|transceiver\b|switchport\b|"
-    r"capabilities\b|description\b|trunk\b|mac\b|flowcontrol\b|storm\b|"
-    r"snmp\b|purge\b)\S+)?\s*$"
-)
 def _compress_interfaces(raw: str) -> str:
-    blocks: list[str] = []
+    blocks: list = []
     current: dict = {}
 
     def _flush():
@@ -211,7 +189,9 @@ def _compress_interfaces(raw: str) -> str:
     return "\n".join(blocks)
 
 
-# ---- show version --------------------------------------------------------
+# ---------------------------------------------------------------------------
+# show version
+# ---------------------------------------------------------------------------
 
 _VERSION_FIELDS = [
     (re.compile(r"Cisco\s+(IOS|NX-OS|IOS-XE|IOS XR)\s+Software.*Version\s+(\S+)", re.I), "os", lambda m: f"{m.group(1)} {m.group(2)}"),
@@ -223,9 +203,8 @@ _VERSION_FIELDS = [
 ]
 
 
-@_register(r"show\s+version")
 def _compress_version(raw: str) -> str:
-    fields: dict[str, str] = {}
+    fields: dict = {}
     for line in raw.splitlines():
         for regex, key, extractor in _VERSION_FIELDS:
             m = regex.search(line)
@@ -236,58 +215,13 @@ def _compress_version(raw: str) -> str:
     return " | ".join(f"{k}={v}" for k, v in fields.items())
 
 
-# ---- show ip bgp summary ------------------------------------------------
+# ---------------------------------------------------------------------------
+# show running-config
+# ---------------------------------------------------------------------------
 
-_BGP_NEIGHBOR = re.compile(
-    r"^(\d+\.\d+\.\d+\.\d+)\s+"    # neighbor
-    r"(\d+)\s+"                      # AS
-    r".*?\s+"                        # skip msg fields
-    r"(\S+)\s*$",                    # state/pfxrcd
-)
-
-
-@_register(r"show\s+(?:ip\s+)?bgp\s+summary")
-def _compress_bgp_summary(raw: str) -> str:
-    rows: list[str] = ["neighbor,as,state_pfxrcd"]
-    for line in raw.splitlines():
-        m = _BGP_NEIGHBOR.match(line.strip())
-        if m:
-            rows.append(f"{m.group(1)},{m.group(2)},{m.group(3)}")
-    if len(rows) < 2:
-        return raw
-    return "\n".join(rows)
-
-
-# ---- show ip ospf neighbor -----------------------------------------------
-
-_OSPF_NBR = re.compile(
-    r"^(\d+\.\d+\.\d+\.\d+)\s+"    # neighbor ID
-    r"(\d+)\s+"                      # priority
-    r"(\S+)\s+"                      # state
-    r"(\S+)\s+"                      # dead time
-    r"(\d+\.\d+\.\d+\.\d+)\s+"     # address
-    r"(\S+)",                        # interface
-)
-
-
-@_register(r"show\s+ip\s+ospf\s+neigh")
-def _compress_ospf_neighbor(raw: str) -> str:
-    rows: list[str] = ["neighbor_id,priority,state,dead_time,address,interface"]
-    for line in raw.splitlines():
-        m = _OSPF_NBR.match(line.strip())
-        if m:
-            rows.append(",".join(m.groups()))
-    if len(rows) < 2:
-        return raw
-    return "\n".join(rows)
-
-
-# ---- show running-config -------------------------------------------------
-
-@_register(r"show\s+run")
 def _compress_running_config(raw: str) -> str:
     lines = raw.splitlines()
-    out: list[str] = []
+    out: list = []
     skip_banners = False
     for line in lines:
         stripped = line.strip()
@@ -317,59 +251,13 @@ def _compress_running_config(raw: str) -> str:
     return "\n".join(out)
 
 
-# ---- show cdp neighbors / show lldp neighbors ----------------------------
+# ---------------------------------------------------------------------------
+# show access-lists
+# ---------------------------------------------------------------------------
 
-_CDP_LINE = re.compile(
-    r"^(\S+)\s+"       # device ID
-    r"(\S+)\s+"        # local intf
-    r"\d+\s+"          # holdtime
-    r"(\S.*\S)\s+"     # capability
-    r"(\S+)\s+"        # platform
-    r"(\S+)\s*$",      # port ID
-)
-
-
-@_register(r"show\s+(?:cdp|lldp)\s+neigh")
-def _compress_cdp_neighbors(raw: str) -> str:
-    rows: list[str] = ["device,local_intf,capability,platform,remote_port"]
-    for line in raw.splitlines():
-        m = _CDP_LINE.match(line.strip())
-        if m:
-            rows.append(f"{m.group(1)},{m.group(2)},{m.group(3).strip()},{m.group(4)},{m.group(5)}")
-    if len(rows) < 2:
-        return raw
-    return "\n".join(rows)
-
-
-# ---- show vlan brief -----------------------------------------------------
-
-_VLAN_LINE = re.compile(
-    r"^(\d+)\s+"         # VLAN ID
-    r"(\S+)\s+"          # name
-    r"(active|act/unsup|sus)\s*"  # status
-    r"(.*)?$",           # ports
-)
-
-
-@_register(r"show\s+vlan\s+brief")
-def _compress_vlan_brief(raw: str) -> str:
-    rows: list[str] = ["vlan,name,status,ports"]
-    for line in raw.splitlines():
-        m = _VLAN_LINE.match(line.strip())
-        if m:
-            ports = m.group(4).strip() if m.group(4) else ""
-            rows.append(f"{m.group(1)},{m.group(2)},{m.group(3)},{ports}")
-    if len(rows) < 2:
-        return raw
-    return "\n".join(rows)
-
-
-# ---- show access-lists ---------------------------------------------------
-
-@_register(r"show\s+(?:ip\s+)?access-lists?")
 def _compress_acl(raw: str) -> str:
     lines = raw.splitlines()
-    out: list[str] = []
+    out: list = []
     for line in lines:
         stripped = line.strip()
         if not stripped:
@@ -383,114 +271,12 @@ def _compress_acl(raw: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# NX-OS / Nexus command families
+# show interface counters errors (NX-OS)
 # ---------------------------------------------------------------------------
-# The fleet these agents drive is predominantly Cisco NX-OS, whose table and
-# detail formats differ from IOS. The compressors below target the NX-OS
-# ``show`` output shapes seen most often in agent gather loops.
-
-# Interface names across IOS / NX-OS / Catalyst — used to tell a data row from
-# a header, legend or continuation line in a fixed-width table.
-_IFACE_NAME_RE = re.compile(
-    r"^(?:mgmt|eth(?:ernet)?|po(?:rt-channel)?|vlan|lo(?:opback)?|nve|"
-    r"tun(?:nel)?|gi\w*|te\w*|twe\w*|fo\w*|hu\w*|fa\w*)\d",
-    re.IGNORECASE,
-)
-
-
-def _csv_row(fields: list[str]) -> str:
-    """Join *fields* as one CSV row, quoting only when a field carries a comma
-    or quote (device ``Name`` columns hold spaces but rarely commas)."""
-    out = []
-    for f in fields:
-        if ("," in f) or ('"' in f):
-            f = '"' + f.replace('"', '""') + '"'
-        out.append(f)
-    return ",".join(out)
-
-
-def _fixed_width_rows(raw: str, keywords: list[str]) -> Optional[list[list[str]]]:
-    """Parse a fixed-width table whose columns start at the ``keywords`` header.
-
-    NX-OS status/brief tables pad columns and let a ``Name`` / ``Reason`` field
-    carry spaces, so a plain whitespace split corrupts them. Instead we find the
-    header line, record each column's start offset, and slice every data row at
-    those offsets. Header, dashed-separator and wrapped-continuation lines are
-    skipped; only lines whose first column is an interface name are kept.
-    Returns ``None`` when the header is absent (caller falls back to raw).
-    """
-    lines = raw.splitlines()
-    positions: Optional[list[int]] = None
-    start = 0
-    for i, line in enumerate(lines):
-        if not all(kw in line for kw in keywords):
-            continue
-        pos: list[int] = []
-        last = -1
-        ok = True
-        for kw in keywords:
-            p = line.find(kw)
-            if p <= last:
-                ok = False
-                break
-            pos.append(p)
-            last = p
-        if ok:
-            positions = pos
-            start = i + 1
-            break
-    if not positions:
-        return None
-    bounds = positions + [10 ** 6]
-    rows: list[list[str]] = []
-    for line in lines[start:]:
-        if not line.strip() or set(line.strip()) <= {"-"}:
-            continue
-        head = line[bounds[0]:bounds[1]].split()
-        if not head or not _IFACE_NAME_RE.match(head[0]):
-            continue
-        rows.append([line[bounds[k]:bounds[k + 1]].strip() for k in range(len(positions))])
-    return rows
-
-
-# ---- show interface status (NX-OS / Catalyst) ----------------------------
-
-@_register(r"^show\s+int(?:erface|erfaces)?(?:\s+\S+)?\s+status\s*$")
-def _compress_intf_status(raw: str) -> str:
-    """``show interface status`` → CSV, dropping the repeated 80-char dashed
-    separators and the per-block ``Port Name Status ...`` headers."""
-    rows = _fixed_width_rows(
-        raw, ["Port", "Name", "Status", "Vlan", "Duplex", "Speed", "Type"]
-    )
-    if not rows:
-        return raw
-    out = ["port,name,status,vlan,duplex,speed,type"]
-    out.extend(_csv_row(r) for r in rows)
-    return "\n".join(out)
-
-
-# ---- show interface brief (NX-OS) ----------------------------------------
-
-@_register(r"^show\s+int(?:erface|erfaces)?(?:\s+\S+)?\s+brief\s*$")
-def _compress_intf_brief_nxos(raw: str) -> str:
-    """``show interface brief`` (NX-OS) → CSV. The two-line wrapped header
-    ('Ethernet Interface' / 'Port Ch #') and dashed separators are dropped."""
-    rows = _fixed_width_rows(
-        raw, ["Ethernet", "VLAN", "Type", "Mode", "Status", "Reason", "Speed", "Port"]
-    )
-    if not rows:
-        return raw
-    out = ["interface,vlan,type,mode,status,reason,speed,port_ch"]
-    out.extend(_csv_row(r) for r in rows)
-    return "\n".join(out)
-
-
-# ---- show interface counters errors (NX-OS) ------------------------------
 
 _COUNTER_VAL_RE = re.compile(r"^(?:\d+|--)$")
 
 
-@_register(r"show\s+int(?:erface|erfaces)?\s+counters?\s+err")
 def _compress_intf_counter_errors(raw: str) -> str:
     """``show interface counters errors`` (NX-OS) → only ports with a non-zero
     counter, per sub-table.
@@ -500,9 +286,9 @@ def _compress_intf_counter_errors(raw: str) -> str:
     non-zero rows is the difference between a truncated, partly-lost table and
     a complete, tiny one.
     """
-    out: list[str] = []
-    cols: Optional[list[str]] = None
-    table_rows: list[str] = []
+    out: list = []
+    cols: Optional[list] = None
+    table_rows: list = []
     saw_table = False
 
     def _flush() -> None:
@@ -542,36 +328,10 @@ def _compress_intf_counter_errors(raw: str) -> str:
     return "show interface counters errors (non-zero ports only; all others 0):\n" + body
 
 
-# ---- show ip eigrp neighbors ---------------------------------------------
+# ---------------------------------------------------------------------------
+# show port-channel summary (NX-OS)
+# ---------------------------------------------------------------------------
 
-_EIGRP_ROW = re.compile(
-    r"^(\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)\s+(\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)"
-)
-
-
-@_register(r"show\s+ip\s+eigrp\s+neigh")
-def _compress_eigrp_neighbors(raw: str) -> str:
-    """``show ip eigrp neighbors`` → CSV, dropping the two-line wrapped column
-    header while keeping the process/VRF context line."""
-    context = None
-    rows = ["h,address,interface,hold,uptime,srtt,rto,q,seq"]
-    for line in raw.splitlines():
-        s = line.strip()
-        if s.startswith("IP-EIGRP neighbors") or s.startswith("EIGRP-IPv4"):
-            context = s
-            continue
-        m = _EIGRP_ROW.match(s)
-        if m:
-            rows.append(",".join(m.groups()))
-    if len(rows) < 2:
-        return raw
-    body = "\n".join(rows)
-    return f"{context}\n{body}" if context else body
-
-
-# ---- show port-channel summary (NX-OS) -----------------------------------
-
-@_register(r"show\s+(?:ether(?:channel)?|port-channel)\s+sum")
 def _compress_portchannel_summary(raw: str) -> str:
     """``show port-channel summary`` (NX-OS) → CSV. The ~10-line static Flags
     legend and dashed separators are pure boilerplate and dropped."""
