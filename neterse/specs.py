@@ -132,14 +132,20 @@ SPECS: list = [
         "command": r"show\s+(?:ip\s+)?bgp\s+summary",
         "platforms": r"ios|xe|xr|nx",
         "strategy": "line_regex_table",
+        # Decision 24: the first number after the neighbor IP is the V
+        # column (BGP version, constant 4), NOT the AS — the legacy regex
+        # captured it as "as", hiding which neighbors are eBGP.
         "row": (
             r"^(\d+\.\d+\.\d+\.\d+)\s+"  # neighbor
+            r"\d+\s+"                      # V (BGP version) — dropped, declared
             r"(\d+)\s+"                    # AS
             r".*?\s+"                      # skip msg fields
             r"(\S+)\s*$"                   # state/pfxrcd
         ),
         "header": "neighbor,as,state_pfxrcd",
-        "dropped_fields": ("msgrcvd", "msgsent", "tblver", "inq", "outq", "up_down"),
+        "dropped_fields": (
+            "version", "msgrcvd", "msgsent", "tblver", "inq", "outq", "up_down",
+        ),
     },
     {
         "id": "cisco/show_ip_ospf_neighbor",

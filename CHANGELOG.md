@@ -37,6 +37,19 @@ the baseline itself wrong twice. Both fixes ship in 0.4.0:
   ospf database`, `show ip protocols`, `show interfaces description`,
   `show ip ospf interface brief`, and IOL-spaced `show cdp neighbors`
   (`Eth 0/0`) — all fail open, none lose data.
+- **`show ip bgp summary` AS fix (decision 24, baseline change).** The
+  legacy regex captured the V column (BGP version, constant `4`) under
+  the `as` header and silently dropped the real AS — eBGP and iBGP
+  neighbors were indistinguishable. Found by BGP-lab verification
+  (r1–r3): every neighbor row now carries its actual AS, `version`
+  joins the declared drops, and the family is parity-exempt via
+  `INTENTIONAL_DIVERGENCES`, pinned by goldens on the legacy fixture
+  and the real r2 capture. Verified live on 21 captures across r1–r3
+  (91% total reduction): bgp-summary row-for-row faithful (93%),
+  route tables with iBGP/eBGP AD intact (78–84%), prefix-list output
+  correctly fail-open, and the parsed tier covering `show ip bgp`
+  (53–57%) and `show ip bgp neighbors` (97% — encoding ntc-templates'
+  own heavily-summarized rows).
 - **Parsed-tier verification** (r1 + netmiko `use_textfsm=True`, i.e.
   ntc-templates/TextFSM — the tier's real consumer stack): 12 live
   families verified cell-for-cell faithful (CSV independently decoded

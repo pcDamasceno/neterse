@@ -1,0 +1,2 @@
+show ip bgp summary
+show bgp summary

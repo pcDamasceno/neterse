@@ -62,6 +62,22 @@ def test_int_brief_keeps_admin_down_status_whole():
     assert len(out.splitlines()) == 1 + n_ifaces
 
 
+def test_bgp_summary_keeps_the_real_as_per_neighbor():
+    """Decision 24: the legacy regex rendered the V column (constant 4)
+    under the "as" header — on this capture (r2, BGP lab) that made the
+    eBGP neighbor (AS 100) indistinguishable from the iBGP ones (AS 200)."""
+    raw = _body("cisco_ios/show_ip_bgp_summary")
+    out = optimize("show ip bgp summary", raw)
+    assert out.splitlines() == [
+        "neighbor,as,state_pfxrcd",
+        "192.168.12.1,100,2",
+        "192.168.23.3,200,2",
+        "192.168.34.4,200,4",
+    ]
+    (cand,) = render(raw, command="show ip bgp summary", platform="cisco_ios")
+    assert "version" in cand.dropped_fields   # V is dropped AND declared now
+
+
 def test_ospf_neighbor_rows_survive_verbatim():
     raw = _body("cisco_ios/show_ip_ospf_neighbor")
     out = optimize("show ip ospf neighbor", raw)

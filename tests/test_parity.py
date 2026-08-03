@@ -34,6 +34,12 @@ INTENTIONAL_DIVERGENCES = {
     # two-token protocol codes (O IA, O E2, ...) and garbles the
     # next-hop/interface columns; confirmed against live lab devices.
     "decision-20-show-ip-route": re.compile(r"show\s+ip\s+route", re.IGNORECASE),
+    # decision 24: bgp-summary faithfulness — the baseline rendered the V
+    # column (constant 4) under the "as" header, silently dropping the real
+    # AS; confirmed against live lab devices (eBGP vs iBGP indistinguishable).
+    "decision-24-bgp-summary": re.compile(
+        r"show\s+(?:ip\s+)?bgp\s+summary", re.IGNORECASE
+    ),
 }
 
 

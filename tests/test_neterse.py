@@ -24,6 +24,7 @@ from neterse import (
 from neterse import registry
 
 from .corpus import (
+    BGP_SUMMARY,
     BRIEF,
     COMMAND_FIXTURES,
     COUNTERS_ERRORS,
@@ -273,4 +274,16 @@ def test_ios_ip_route_golden():
         "O,10.1.2.0/24,110/30,10.0.0.1,GigabitEthernet0/1\n"
         "C,10.0.0.0/24,,,GigabitEthernet0/0\n"
         "S*,0.0.0.0/0,1/0,192.168.1.1,"
+    )
+
+
+def test_ios_bgp_summary_golden():
+    """The post-decision-24 baseline for the bgp-summary family, pinned
+    exactly (exempt from snapshot parity — see test_parity.py). The old
+    regex captured the V column (constant 4) as "as"; the fixture's two
+    different ASes are the proof it now reads the real one."""
+    assert optimize("show ip bgp summary", BGP_SUMMARY) == (
+        "neighbor,as,state_pfxrcd\n"
+        "10.0.0.1,65001,25\n"
+        "10.0.0.5,65002,Idle"
     )
