@@ -258,6 +258,32 @@ COMMAND_FIXTURES: list[tuple[str, str, str]] = [
     ("run-abbrev", "show run", RUNNING_CONFIG),
 ]
 
+# Pre-parsed rows for the parsed tier (Phase 2) — the shapes Genie /
+# ntc-templates actually emit for the raw bodies above, so the acceptance
+# comparison against ``json.dumps(rows)`` runs on realistic data.
+PARSED_IP_INT_BRIEF: list[dict] = [
+    {"interface": "GigabitEthernet0/1", "ip_address": "10.0.0.1", "status": "up", "proto": "up"},
+    {"interface": "GigabitEthernet0/2", "ip_address": "unassigned", "status": "down", "proto": "down"},
+    {"interface": "Loopback0", "ip_address": "192.168.255.1", "status": "up", "proto": "up"},
+]
+
+PARSED_INTF_STATUS: list[dict] = [
+    {"port": "Eth1/11", "name": "RSRFF206 Twe1/0/3", "status": "connected",
+     "vlan": "routed", "duplex": "full", "speed": "10G", "type": "10Gbase-SR"},
+    {"port": "Eth1/45", "name": "RFRA3213-Eth1/48", "status": "connected",
+     "vlan": "routed", "duplex": "full", "speed": "10G", "type": "10Gbase-LR"},
+    {"port": "Po101", "name": "MFS4163-Po101", "status": "connected",
+     "vlan": "trunk", "duplex": "full", "speed": "10G", "type": "--"},
+]
+
+# Genie-style: nested structure and non-string scalars inside a row.
+PARSED_NESTED_ROWS: list[dict] = [
+    {"neighbor": "10.0.0.1", "as": 65001, "up": True,
+     "address_family": {"ipv4 unicast": {"prefixes": 25}}},
+    {"neighbor": "10.0.0.5", "as": 65002, "up": False,
+     "address_family": {"ipv4 unicast": {"prefixes": 0}}},
+]
+
 # Inputs that must always fail open (and must never raise anywhere).
 EDGE_INPUTS: list[str] = [
     "",

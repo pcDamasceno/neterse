@@ -1,12 +1,13 @@
 """Hand-written compressors — the code tier of the registry.
 
 Since Phase 1, table-shaped command families live as declarative specs
-(``specs.py``) compiled by the engine; what remains here is the small set
-of genuinely stateful formats a flat spec cannot express faithfully —
-multi-line interface-detail blocks (NX-OS splits state across lines),
-field scans, banner state machines, and multi-table zero-row suppression —
-plus the fixed-width helpers the engine reuses. Registration order lives
-in ``registry.py``; nothing self-registers here.
+(``specs.py``) compiled by the engine — and since Phase 2 the same is
+true of ``show version``-style field scans (``kv_extract``). What remains
+here is the small set of genuinely stateful formats a flat spec cannot
+express faithfully — multi-line interface-detail blocks (NX-OS splits
+state across lines), banner state machines, and multi-table zero-row
+suppression — plus the fixed-width helpers the engine reuses.
+Registration order lives in ``registry.py``; nothing self-registers here.
 
 Only the standard library may be imported — this module stays the
 zero-dependency leaf of the package. Function bodies are byte-parity
@@ -187,32 +188,6 @@ def _compress_interfaces(raw: str) -> str:
     if not blocks:
         return raw
     return "\n".join(blocks)
-
-
-# ---------------------------------------------------------------------------
-# show version
-# ---------------------------------------------------------------------------
-
-_VERSION_FIELDS = [
-    (re.compile(r"Cisco\s+(IOS|NX-OS|IOS-XE|IOS XR)\s+Software.*Version\s+(\S+)", re.I), "os", lambda m: f"{m.group(1)} {m.group(2)}"),
-    (re.compile(r"uptime is\s+(.+)", re.I), "uptime", lambda m: m.group(1).strip()),
-    (re.compile(r"(\d+[KMG])\s+bytes of (?:physical\s+)?memory", re.I), "memory", lambda m: m.group(1)),
-    (re.compile(r"[Pp]rocessor\s+board\s+ID\s+(\S+)"), "serial", lambda m: m.group(1)),
-    (re.compile(r"[Mm]odel\s+number\s*:\s*(\S+)"), "model", lambda m: m.group(1)),
-    (re.compile(r"[Ss]ystem\s+image\s+file\s+is\s+\"([^\"]+)\""), "image", lambda m: m.group(1)),
-]
-
-
-def _compress_version(raw: str) -> str:
-    fields: dict = {}
-    for line in raw.splitlines():
-        for regex, key, extractor in _VERSION_FIELDS:
-            m = regex.search(line)
-            if m and key not in fields:
-                fields[key] = extractor(m)
-    if not fields:
-        return raw
-    return " | ".join(f"{k}={v}" for k, v in fields.items())
 
 
 # ---------------------------------------------------------------------------

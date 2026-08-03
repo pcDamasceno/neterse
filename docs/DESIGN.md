@@ -1,8 +1,8 @@
 # terse — design, topology, and plan
 
-*Status: Phase 1 shipped. This document is the project's source of truth
-for architecture and roadmap; decisions recorded here are binding until a
-new entry supersedes them.*
+*Status: Phase 2 shipped (0.3.0). This document is the project's source
+of truth for architecture and roadmap; decisions recorded here are
+binding until a new entry supersedes them.*
 
 ## The problem
 
@@ -33,11 +33,17 @@ faithful representation before it enters model context.
         │  │ into compressors             │  │ formats (multi-line      │ │
         │  │  · line_regex_table          │  │ blocks, banner state     │ │
         │  │  · fixed_width_table         │  │ machines, multi-table    │ │
-        │  │  · (Phase 2: kv_extract,     │  │ zero-row suppression)    │ │
-        │  │     projection encoders)     │  │                          │ │
+        │  │  · kv_extract                │  │ zero-row suppression)    │ │
+        │  │  + named profile projections │  │                          │ │
         │  └──────────────────────────────┘  └──────────────────────────┘ │
+        │  ┌── parsed tier ──────────────────────────────────────────────┐│
+        │  │ parsed.py: rows Genie/ntc-templates/TTP/NAPALM already      ││
+        │  │ produced → header-once encoders (parsed:csv, parsed:toon);  ││
+        │  │ command-independent; profile projections by field name      ││
+        │  └─────────────────────────────────────────────────────────────┘│
         │                                                                 │
-        │  render() → [Candidate(text, method, source, dropped_fields)]   │
+        │  render() → [Candidate(text, method, source, dropped_fields,    │
+        │             profile)]                                           │
         │  every path FAIL-OPEN · candidates only ever shrink             │
         └────────────────────────────────┬────────────────────────────────┘
                                          ▼
@@ -63,18 +69,26 @@ register(pattern, *, platforms=None, dropped_fields=None)   # plugin hatch
 iter_compressors() / iter_entries()    # registry views
 ```
 
-* `platform` (active): skip-filter over declared platform scopes. It can
-  only ever *skip* entries, never force a match — omitting it is always
-  safe. This is the false-match killer: an NX-OS table spec no longer
-  claims Arista output when the caller says `platform="arista_eos"`.
-* `parsed` (reserved, Phase 2): rows already produced by Genie /
-  ntc-templates / TTP / NAPALM / gNMI, to be projected and re-encoded
-  compactly (header-once tabular — CSV and, where it wins, TOON-format).
-* `profile` (reserved, Phase 2): named, *declared-lossy* projections
-  (e.g. `updown` keeping only Port+Status). Renderings under a non-default
-  profile append an inline omission marker
+* `platform` (active since 0.2.0): skip-filter over declared platform
+  scopes. It can only ever *skip* entries, never force a match — omitting
+  it is always safe. This is the false-match killer: an NX-OS table spec
+  no longer claims Arista output when the caller says
+  `platform="arista_eos"`.
+* `parsed` (active since 0.3.0): rows already produced by Genie /
+  ntc-templates / TTP / NAPALM / gNMI — a list of dicts (or one dict) —
+  re-encoded header-once as two candidates, `parsed:csv` and
+  `parsed:toon` (`method="parsed"`), independent of any registry match.
+  Both are emitted every time; smallest-wins is the consumer's call
+  (decision 10). Non-row-shaped input yields no candidates.
+* `profile` (active since 0.3.0): named, *declared-lossy* projections
+  (`updown` ships first: interface liveness only). Renderings under a
+  non-default profile append an inline omission marker
   (`[omitted: … — re-query profile=full]`) so the model knows data was
-  withheld and can recover. Default profile stays complete-but-compact.
+  withheld and can recover; the omitted names join the candidate's
+  manifest and `Candidate.profile` says what was applied. Entries that
+  don't declare the requested profile render their complete default
+  (decision 11); `full` is an alias of `default` (decision 12). The
+  default profile stays complete-but-compact.
 
 ## Invariants (enforced, not aspirational)
 
@@ -110,9 +124,18 @@ iter_compressors() / iter_entries()    # registry views
 |---|---|---|
 | 0 | Extract from dbcli verbatim; freeze API (`render`/`Candidate`/`optimize`/`register`); parity baseline + cross-matrix suite; zero-dep packaging | ✅ shipped |
 | 1 | Spec engine (generic strategies over dict specs); 9/15 families converted; platform-keyed dispatch; lossiness manifests on every entry | ✅ shipped (0.2.0) |
-| 2 | **Parsed tier**: `parsed=` accepts pre-parsed rows → field projection + compact encoders (CSV; TOON-format where it wins); opt-in `profile=` projections with inline omission markers; `kv_extract` strategy to move `show version`-style scans to specs | ▢ next |
+| 2 | **Parsed tier**: `parsed=` accepts pre-parsed rows → field projection + compact encoders (`parsed:csv` beats `json.dumps(rows)` by ~45–50%; `parsed:toon` adds the explicit row count); opt-in `profile=` projections with inline omission markers (`updown` ships first); `kv_extract` strategy moved `show version` to a spec (10 specs + 5 code) | ✅ shipped (0.3.0) |
 | 3 | **Community launch**: PyPI release (`terse-net`; PEP 541 request for `terse`), fixture-per-file contribution layout, `terse audit` coverage tool (port of dbcli's run analyzer), CI token-savings regression with a pinned tokenizer, multi-vendor expansion (Arista EOS, Juniper Junos, Aruba, MikroTik) | ▢ |
 | 4 | dbcli (and other consumers) swap their vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ▢ |
+
+The inputs each of those phases needs from the consumer side — the seam
+terse plugs into, the parsed-tier acceptance test, the audit-tool port
+spec, measurement conventions, field notes, and the cutover checklist —
+are carried in **[CONSUMER-HANDOFF.md](CONSUMER-HANDOFF.md)** (§2, §2,
+§4, §3, §5, §6 respectively). Read it before starting Phase 3; it exists
+so this repository never has to reach back into dbcli. The Phase-2
+acceptance rule from §2 — beat `json.dumps(rows)` on multi-row output or
+don't ship the tier — is pinned permanently in `tests/test_parsed.py`.
 
 ### Why the parsed tier is the coverage unlock
 
@@ -141,6 +164,11 @@ competes with the parser projects.
 | 7 | Canonical registry order frozen to the legacy sequence | Winner ties (equal-length candidates) resolve to the first entry; frozen order makes byte-parity unconditional instead of probabilistic. |
 | 8 | Tokenizers are CI-only, never runtime | `est_tokens()` is chars/4 by convention (matches dbcli's metric). Real tokenizer savings-regression lands in Phase 3 CI. |
 | 9 | Baseline corpus lives in `tests/corpus.py` as strings | One import, no I/O in unit tests. File-per-fixture layout arrives with the Phase-3 contribution flow and the audit tool that generates them. |
+| 10 | Parsed tier always emits BOTH `parsed:csv` and `parsed:toon` | CSV is nearly always smaller on flat tables; TOON's explicit `[N]` row count lets a policy detect truncation. Choosing between size and self-describing structure is policy — invariant 3 says that's the consumer's call, so both candidates ship every time. |
+| 11 | Profile fallback is the complete default rendering, not a skip | An entry that doesn't declare the requested profile renders in full. Skipping would turn a profile request into data loss on uncovered families — the exact failure mode fail-open exists to prevent. Corollary: an unknown profile string behaves as `default` everywhere. |
+| 12 | `full` is an alias of `default` | The omission marker tells the model `re-query profile=full`; that spelling must actually work. Aliasing beats renaming the default (which would move bytes) and beats a marker pointing at a profile that doesn't exist. |
+| 13 | `show version` conversion may change `Candidate.source`, never text | Byte-parity governs rendering text; entry names are consumer-visible telemetry, not payload. `_compress_version` → `spec:cisco/show_version` is the recorded precedent. |
+| 14 | Parsed-tier profiles project by field-NAME pattern | Parser schemas differ per ecosystem (ntc: `intf`/`status`; Genie: `oper_state`…), so a name-pattern table is the only command-independent way to project. A profile whose patterns keep nothing (or everything) falls back to complete — it never guesses. |
 
 ## Provenance
 
@@ -149,6 +177,12 @@ Networks", `dbcli/services/token_optimizer.py`, inspired by NetClaw's
 TOON serialization work) and was extracted in two recorded steps: Phase 0
 froze the API and proved byte-equivalence against the in-tree
 implementation; this repository's `tests/legacy_snapshot.py` is that
-frozen module and remains the standing acceptance baseline. dbcli
-currently vendors an identical copy (`dbcli/_incubator/showbrief`) and
-swaps to the pip dependency in Phase 4.
+frozen module and remains the standing acceptance baseline.
+
+dbcli still vendors the **Phase-0** copy (`dbcli/_incubator/showbrief`,
+0.1.0, reached through a `dbcli/services/token_optimizer.py` re-export
+shim); Phase 1 landed here only and is deliberately **not** back-ported —
+0.2.0's default path is byte-identical to the shared baseline, so the
+Phase-4 swap to the pip dependency needs no re-baselining and a second
+synchronized copy would buy nothing. Divergence detail and the cutover
+checklist: [CONSUMER-HANDOFF.md](CONSUMER-HANDOFF.md) §1 and §6.

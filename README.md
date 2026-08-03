@@ -21,6 +21,14 @@ best = min(candidates, key=lambda c: len(c.text), default=None)
 
 # Convenience wrapper — smallest candidate's text, or raw unchanged:
 compact = optimize("show interface status", raw)
+
+# Parsed tier — rows Genie/ntc-templates already produced, re-encoded
+# header-once (beats json.dumps(rows) by ~45-50% on multi-row output):
+candidates = render(raw, command="show ip int brief", parsed=rows)
+
+# Opt-in declared-lossy projection; the rendering itself says what was
+# withheld: "[omitted: name, vlan, ... — re-query profile=full]"
+candidates = render(raw, command="show interface status", profile="updown")
 ```
 
 ```
@@ -48,14 +56,18 @@ pip install terse-net        # import name: terse
 ## Design in one paragraph
 
 Two tiers, one contract. The **raw-text tier** compresses CLI output
-directly — declarative specs drive ~5 generic strategies (fixed-width
-table → CSV, line-regex table → CSV, key-value scan, line filters, zero-row
-suppression), with plain-Python compressors as the escape hatch for
-genuinely stateful formats. The **parsed tier** (roadmap) re-encodes rows
-that Genie / ntc-templates / TTP / NAPALM already parsed into compact
-tabular form. Both tiers emit `Candidate`s; the library **never picks a
-winner** — smallest-wins, ledgers, metrics, and caching belong to the
-consumer. Full architecture: [docs/DESIGN.md](docs/DESIGN.md).
+directly — declarative specs drive generic strategies (fixed-width
+table → CSV, line-regex table → CSV, key-value scan), with plain-Python
+compressors as the escape hatch for genuinely stateful formats. The
+**parsed tier** re-encodes rows that Genie / ntc-templates / TTP / NAPALM
+already parsed into compact header-once form (`render(..., parsed=rows)`
+→ CSV and TOON-style candidates that undercut `json.dumps(rows)` by
+~45–50%). Opt-in **profiles** (`profile="updown"`) narrow output to a
+declared projection and say so inline
+(`[omitted: … — re-query profile=full]`). Both tiers emit `Candidate`s;
+the library **never picks a winner** — smallest-wins, ledgers, metrics,
+and caching belong to the consumer. Full architecture:
+[docs/DESIGN.md](docs/DESIGN.md).
 
 ## Invariants
 
@@ -101,7 +113,7 @@ uniform tables is on the roadmap.
 |---|---|---|
 | 0 | API frozen (`render`/`Candidate`/`optimize`/`register`); 15 compressor families extracted verbatim; byte-parity baseline | ✅ |
 | 1 | Spec engine (generic strategies over declarative specs), platform-keyed dispatch, declared-lossiness manifests | ✅ |
-| 2 | Parsed tier: field projection + compact encoders (TOON-format/CSV) over pre-parsed rows; opt-in profiles with inline omission markers | ▢ |
+| 2 | Parsed tier: field projection + compact encoders (CSV/TOON) over pre-parsed rows; opt-in profiles with inline omission markers; `kv_extract` strategy | ✅ |
 | 3 | PyPI release, fixture-per-file contribution flow, `terse audit` coverage tool, multi-vendor expansion (Arista, Juniper, …) | ▢ |
 
 ## Contributing

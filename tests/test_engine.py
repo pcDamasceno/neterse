@@ -1,9 +1,11 @@
-"""Phase-1 specifics: spec engine, platform keying, lossiness manifests.
+"""Phase-1/2 spec-engine specifics: strategies, platform keying, manifests.
 
 Byte-parity of spec-built compressors with their hand-written ancestors is
 covered exhaustively by ``test_parity.py`` (the default, no-platform path
-must match the frozen baseline everywhere). This file pins the NEW
-behavior Phase 1 introduces on top.
+must match the frozen baseline everywhere — including the Phase-2
+``kv_extract`` conversion of ``show version``). This file pins the NEW
+behavior the spec engine introduces on top; profile projections are
+pinned in ``test_profiles.py``, the parsed tier in ``test_parsed.py``.
 """
 from __future__ import annotations
 
@@ -25,7 +27,7 @@ def test_every_spec_builds_and_declares():
     """Specs must compile, use known strategies, and carry a manifest —
     a spec without ``dropped_fields`` would silently regress to
     'undeclared', losing exactly the vocabulary Phase 1 exists to add."""
-    assert len(SPECS) == 9
+    assert len(SPECS) == 10
     ids = [s["id"] for s in SPECS]
     assert len(ids) == len(set(ids)), "duplicate spec ids"
     for spec in SPECS:
@@ -36,6 +38,12 @@ def test_every_spec_builds_and_declares():
         assert fn.__name__ == f"spec:{spec['id']}"
         # fail-open on garbage, like every compressor
         assert fn("garbage that matches nothing") == "garbage that matches nothing"
+        # every declared profile must also compile (and fail loudly on typos)
+        for name in spec.get("profiles", ()):
+            variant = build(spec, profile=name)
+            assert callable(variant)
+            assert variant.__name__ == f"spec:{spec['id']}@{name}"
+            assert variant("garbage that matches nothing") == "garbage that matches nothing"
 
 
 def test_unknown_strategy_fails_loudly_at_build_time():
@@ -47,9 +55,10 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
     names = [e.name for e in iter_entries()]
     assert names[0] == "spec:cisco/show_ip_route"
     assert names[2] == "_compress_interfaces"       # code stays 3rd, as in legacy
+    assert names[3] == "spec:cisco/show_version"    # kv_extract conversion, Phase 2
     assert names[-1] == "_compress_portchannel_summary"
-    assert sum(1 for n in names if n.startswith("spec:")) == 9
-    assert sum(1 for n in names if not n.startswith("spec:")) == 6
+    assert sum(1 for n in names if n.startswith("spec:")) == 10
+    assert sum(1 for n in names if not n.startswith("spec:")) == 5
 
 
 # ---------------------------------------------------------------------------

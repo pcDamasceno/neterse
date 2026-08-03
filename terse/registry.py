@@ -18,13 +18,23 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Mapping, Optional, Tuple
 
 from . import _compressors as _c
-from .engine import build
+from .engine import build, profile_drops
 from .specs import SPECS
 
 Compressor = Callable[[str], str]
+
+
+@dataclass(frozen=True)
+class ProfileVariant:
+    """A named declared-lossy rendering of an entry: the projected
+    compressor plus the FULL manifest (base drops + projected-out
+    columns) its candidates carry."""
+
+    fn: Compressor
+    dropped_fields: Tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -36,9 +46,25 @@ class Entry:
     # None = undeclared (pre-manifest legacy); () = declared lossless;
     # non-empty = data-bearing fields this rendering omits.
     dropped_fields: Optional[Tuple[str, ...]] = None
+    # Named opt-in projections (render(profile=...)); None = this entry
+    # only has its complete default rendering.
+    profiles: Optional[Mapping[str, ProfileVariant]] = None
 
 
 def _spec_entry(spec: dict) -> Entry:
+    base_drops = (
+        tuple(spec["dropped_fields"])
+        if spec.get("dropped_fields") is not None else None
+    )
+    variants = None
+    if spec.get("profiles"):
+        variants = {
+            name: ProfileVariant(
+                fn=build(spec, profile=name),
+                dropped_fields=(base_drops or ()) + profile_drops(spec, name),
+            )
+            for name in spec["profiles"]
+        }
     return Entry(
         pattern=re.compile(spec["command"], re.IGNORECASE),
         fn=build(spec),
@@ -47,10 +73,8 @@ def _spec_entry(spec: dict) -> Entry:
             re.compile(spec["platforms"], re.IGNORECASE)
             if spec.get("platforms") else None
         ),
-        dropped_fields=(
-            tuple(spec["dropped_fields"])
-            if spec.get("dropped_fields") is not None else None
-        ),
+        dropped_fields=base_drops,
+        profiles=variants,
     )
 
 
@@ -84,11 +108,7 @@ REGISTRY: List[Entry] = [
         _c._compress_interfaces,
         dropped_fields=("unmatched_lines", "zero_valued_error_counters"),
     ),
-    _code_entry(
-        r"show\s+version",
-        _c._compress_version,
-        dropped_fields=("unmatched_lines",),
-    ),
+    _spec_entry(_BY_ID["cisco/show_version"]),
     _spec_entry(_BY_ID["cisco/show_ip_bgp_summary"]),
     _spec_entry(_BY_ID["cisco/show_ip_ospf_neighbor"]),
     _code_entry(

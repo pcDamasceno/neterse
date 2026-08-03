@@ -43,7 +43,7 @@ from .corpus import (
 # ===========================================================================
 
 def test_version_and_exports():
-    assert __version__ == "0.2.0"
+    assert __version__ == "0.3.0"
     assert callable(optimize) and callable(render) and callable(register)
     assert callable(iter_compressors)
 
@@ -66,19 +66,21 @@ def test_render_unknown_command_returns_no_candidates():
     assert render("some output", command="show something weird") == []
 
 
-def test_reserved_parameters_and_matching_platform_keep_output():
-    """``parsed``/``profile`` are reserved (inert); a MATCHING platform
-    string must not change the result either — the filter only ever skips
-    non-matching entries (mismatch behavior is pinned in test_engine.py)."""
+def test_default_path_is_stable_under_matching_platform_and_profile_aliases():
+    """The byte-parity path: a MATCHING platform string, the default
+    profile and its ``full`` alias must all reproduce the plain result
+    exactly (mismatch behavior is pinned in test_engine.py, projections
+    in test_profiles.py, the parsed tier in test_parsed.py)."""
     plain = render(IP_ROUTE, command="show ip route")
-    reserved = render(
-        IP_ROUTE,
-        command="show ip route",
-        platform="cisco_nxos",
-        parsed=[{"prefix": "10.1.1.0/24"}],
-        profile="brief",
-    )
-    assert [c.text for c in plain] == [c.text for c in reserved]
+    for kwargs in (
+        {"platform": "cisco_nxos"},
+        {"profile": "default"},
+        {"profile": "full"},
+        {"platform": "cisco_nxos", "profile": "full"},
+    ):
+        again = render(IP_ROUTE, command="show ip route", **kwargs)
+        assert [c.text for c in plain] == [c.text for c in again]
+        assert all(c.profile == "default" for c in again)
 
 
 @pytest.mark.parametrize(

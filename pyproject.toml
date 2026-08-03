@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # abandoned 2019 package (PEP 541 name-transfer is a later option). The
 # IMPORT name is plain `terse`.
 name = "terse-net"
-version = "0.2.0"                     # keep in lockstep with terse.__version__
+version = "0.3.0"                     # keep in lockstep with terse.__version__
 description = "terse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
 readme = "README.md"
 requires-python = ">=3.9"

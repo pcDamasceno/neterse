@@ -18,11 +18,20 @@ Field notes:
 ``dropped_fields``
     The lossiness manifest: names of DATA-bearing fields this rendering
     omits, surfaced verbatim on ``Candidate.dropped_fields`` so consumers
-    can disclose omissions to the model (inline markers land with Phase 2
-    profiles). Pure noise — separators, static legends, repeated headers —
-    is dropped freely and never declared. ``()`` means "declared
-    lossless"; ``None`` (absent) means "undeclared" (legacy code
-    compressors only).
+    can disclose omissions to the model. Pure noise — separators, static
+    legends, repeated headers — is dropped freely and never declared.
+    ``()`` means "declared lossless"; ``None`` (absent) means
+    "undeclared" (legacy code compressors only).
+
+``profiles``
+    Named, opt-in, *declared-lossy* column projections (Phase 2):
+    ``{"updown": {"keep": ["port", "status"]}}``. Requested via
+    ``render(..., profile="updown")``; the variant emits only the kept
+    columns and appends an inline omission marker naming what was
+    withheld. The omitted column names join the entry's manifest on the
+    resulting candidates. Entries that don't declare a requested profile
+    render their complete default — a profile can narrow output only
+    where a spec explicitly said how.
 
 The row regexes below are byte-for-byte the historical hand-written ones;
 the parity suite holds spec output identical to the frozen baseline.
@@ -66,6 +75,41 @@ SPECS: list = [
         "header": "interface,ip,status,protocol",
         "columns": [1, 2, 5, 6],
         "dropped_fields": ("ok", "method"),
+        "profiles": {"updown": {"keep": ["interface", "status", "protocol"]}},
+    },
+    {
+        "id": "cisco/show_version",
+        "command": r"show\s+version",
+        "platforms": r"ios|xe|xr|nx",
+        "strategy": "kv_extract",
+        # Field order is the scan order per line; OUTPUT order is the order
+        # fields first match top-to-bottom (byte-parity with the historical
+        # hand-written compressor). Patterns are byte-for-byte the legacy ones.
+        "fields": [
+            {
+                "key": "os",
+                "pattern": r"Cisco\s+(IOS|NX-OS|IOS-XE|IOS XR)\s+Software.*Version\s+(\S+)",
+                "flags": re.IGNORECASE,
+                "template": "{1} {2}",
+            },
+            {
+                "key": "uptime",
+                "pattern": r"uptime is\s+(.+)",
+                "flags": re.IGNORECASE,
+                "strip": True,
+            },
+            {
+                "key": "memory",
+                "pattern": r"(\d+[KMG])\s+bytes of (?:physical\s+)?memory",
+                "flags": re.IGNORECASE,
+            },
+            {"key": "serial", "pattern": r"[Pp]rocessor\s+board\s+ID\s+(\S+)"},
+            {"key": "model", "pattern": r"[Mm]odel\s+number\s*:\s*(\S+)"},
+            {"key": "image", "pattern": r"[Ss]ystem\s+image\s+file\s+is\s+\"([^\"]+)\""},
+        ],
+        "dropped_fields": ("unmatched_lines",),
+        "doc": "show version -> one key=value line (os, uptime, memory, "
+               "serial, model, image); everything unmatched is dropped.",
     },
     {
         "id": "cisco/show_ip_bgp_summary",
@@ -137,6 +181,7 @@ SPECS: list = [
         "keywords": ["Port", "Name", "Status", "Vlan", "Duplex", "Speed", "Type"],
         "header": "port,name,status,vlan,duplex,speed,type",
         "dropped_fields": (),
+        "profiles": {"updown": {"keep": ["port", "status"]}},
         "doc": "show interface status (NX-OS / Catalyst) -> CSV; drops the "
                "repeated dashed separators and per-block column headers.",
     },
@@ -148,6 +193,7 @@ SPECS: list = [
         "keywords": ["Ethernet", "VLAN", "Type", "Mode", "Status", "Reason", "Speed", "Port"],
         "header": "interface,vlan,type,mode,status,reason,speed,port_ch",
         "dropped_fields": (),
+        "profiles": {"updown": {"keep": ["interface", "status", "reason"]}},
         "doc": "show interface brief (NX-OS) -> CSV; the two-line wrapped "
                "header and dashed separators are dropped.",
     },
