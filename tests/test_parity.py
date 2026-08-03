@@ -13,6 +13,8 @@ decision — record it in docs/DESIGN.md, don't quietly edit the snapshot.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from terse import optimize as terse_optimize
@@ -20,6 +22,24 @@ from terse import render
 
 from . import legacy_snapshot
 from .corpus import ALL_BODIES, ALL_COMMANDS, COMMAND_FIXTURES
+
+# Families whose output INTENTIONALLY diverged from the frozen baseline.
+# Each entry is a recorded decision in docs/DESIGN.md — nothing goes in
+# here without one. Exempted pairs still run both sides (no-crash,
+# shrink-coherence); only the byte-equality assertion is lifted, and the
+# family's NEW output is pinned by its own golden tests instead
+# (test_terse.py / test_cisco_real_captures.py).
+INTENTIONAL_DIVERGENCES = {
+    # decision 20: route-table faithfulness — the baseline silently drops
+    # two-token protocol codes (O IA, O E2, ...) and garbles the
+    # next-hop/interface columns; confirmed against live lab devices.
+    "decision-20-show-ip-route": re.compile(r"show\s+ip\s+route", re.IGNORECASE),
+}
+
+
+def _diverged(command: str) -> bool:
+    return any(p.search(command) for p in INTENTIONAL_DIVERGENCES.values())
+
 
 CROSS_MATRIX = [
     pytest.param(cmd, body, id=f"c{ci:02d}-b{bi:02d}")
@@ -30,6 +50,8 @@ CROSS_MATRIX = [
 
 @pytest.mark.parametrize("command,body", CROSS_MATRIX)
 def test_optimize_byte_parity(command, body):
+    if _diverged(command):
+        pytest.skip("recorded divergence — pinned by its own golden tests")
     assert terse_optimize(command, body) == legacy_snapshot.optimize(command, body)
 
 
@@ -52,11 +74,13 @@ def test_render_is_coherent_with_optimize(command, body):
 )
 def test_corpus_diagonal_actually_compresses(label, command, body):
     """Guards corpus liveness: every fixture paired with its own command must
-    genuinely shrink, and identically on both sides of the extraction."""
+    genuinely shrink, and identically on both sides of the extraction
+    (unless the family carries a recorded divergence)."""
     out = terse_optimize(command, body)
     assert out != body
     assert len(out) < len(body)
-    assert out == legacy_snapshot.optimize(command, body)
+    if not _diverged(command):
+        assert out == legacy_snapshot.optimize(command, body)
 
 
 def test_every_legacy_family_still_covered():

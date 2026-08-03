@@ -47,17 +47,29 @@ SPECS: list = [
         "command": r"show\s+ip\s+route",
         "platforms": r"ios|xe|xr|nx",
         "strategy": "line_regex_table",
+        # Rewritten after live-lab verification (decision 20): the legacy
+        # regex silently dropped every two-token protocol code (O IA,
+        # O E2, D EX, ...) and rendered `is`/route-age tokens into the
+        # next-hop and interface columns.
         "row": r"""
-    ^[\s*>]*                          # selection markers
-    ([A-Z*]\S*)\s+                    # protocol code (O, B, S, C, O IA, …)
-    (\d+\.\d+\.\d+\.\d+/?\d*)\s+     # prefix
-    (?:\[(\d+/\d+)\])?\s*             # admin/metric  [110/20]
-    (?:via\s+(\S+))?                  # next-hop
-    [,\s]*(?:(\S+))?                  # egress interface
+    ^([A-Za-z*+%&][A-Za-z0-9*]{0,4}                # protocol code (C, L, S*, O, i, O*E2, ...)
+    (?:\s(?:IA|EX|E[12]|N[12]|L[12]|su|ia))?)      # two-token codes: O IA, O E2, D EX, i L1, ...
+    \s+
+    (\d+\.\d+\.\d+\.\d+(?:/\d+)?)                  # prefix (mask may live on the group header)
+    (?:\s+\[(\d+/\d+)\])?                           # [admin/metric]
+    (?:\s+via\s+(\d+\.\d+\.\d+\.\d+))?             # next-hop IP, comma excluded
+    (?:,\s*\d[\w:.]*)*                              # route age — dropped, declared
+    (?:\s+is\s+directly\s+connected)?               # connected-route phrasing
+    (?:,\s*(\S+))?                                  # egress interface
+    \s*$
     """,
         "row_flags": re.VERBOSE,
         "header": "proto,prefix,ad/metric,next_hop,interface",
-        "dropped_fields": (),
+        "dropped_fields": ("route_age", "ecmp_alternate_paths",
+                           "subnet_group_headers"),
+        "doc": "show ip route (IOS/IOS-XE) -> CSV; drops the Codes legend, "
+               "subnet-grouping headers, route-age fields and ECMP "
+               "continuation lines (all declared).",
     },
     {
         "id": "cisco_ios/show_ip_interface_brief",
@@ -69,7 +81,11 @@ SPECS: list = [
             r"(\d+\.\d+\.\d+\.\d+|unassigned)\s+"  # IP
             r"(YES|NO)\s+"                          # OK?
             r"(\S+)\s+"                             # method
-            r"(\S+)\s+"                             # status
+            # `administratively down` is one status value; without the
+            # optional prefix it split across the status AND protocol
+            # columns, and the real protocol column was never read
+            # (found in live-lab verification, decision 21).
+            r"((?:administratively )?\S+)\s+"       # status
             r"(\S+)"                                # protocol
         ),
         "header": "interface,ip,status,protocol",

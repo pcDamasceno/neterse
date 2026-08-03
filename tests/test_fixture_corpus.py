@@ -60,22 +60,26 @@ def test_diagonal_shrinks_with_platform_and_without(fixture, command):
 
 @pytest.mark.parametrize("fixture,command", DIAGONAL)
 def test_diagonal_winner_is_the_familys_own_spec(fixture, command):
-    """Coverage must come from the family's own entry, not a false match
-    that happens to shrink — that would report coverage that doesn't
-    survive a platform filter or a format drift."""
+    """Coverage must come from the family's own vendor entry, not a false
+    match that happens to shrink — that would report coverage that
+    doesn't survive a platform filter or a format drift. Matching is by
+    vendor stem: a cisco_ios fixture may be won by `spec:cisco/...` or
+    `spec:cisco_ios/...` alike."""
+    vendor = fixture.platform.split("_")[0]
     candidates = render(fixture.body, command=command, platform=fixture.platform)
     best = min(candidates, key=lambda c: len(c.text))
-    assert best.source.startswith(f"spec:{fixture.platform}/"), (
+    assert best.source.startswith(f"spec:{vendor}"), (
         f"{fixture.label}: winner was {best.source}"
     )
 
 
 def test_wrong_platform_removes_the_vendor_candidates():
     for f in FILE_FIXTURES:
-        wrong = "cisco_ios" if f.platform != "cisco_ios" else "juniper_junos"
+        vendor = f.platform.split("_")[0]
+        wrong = "cisco_ios" if vendor != "cisco" else "juniper_junos"
         for cmd in f.commands:
             for c in render(f.body, command=cmd, platform=wrong):
-                assert not c.source.startswith(f"spec:{f.platform}/"), (
+                assert not c.source.startswith(f"spec:{vendor}"), (
                     f"{f.label}: {c.source} survived platform={wrong}"
                 )
 

@@ -1,0 +1,2 @@
+show ip route
+show ip route ospf

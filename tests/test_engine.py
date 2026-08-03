@@ -111,7 +111,9 @@ def test_declared_drops_flow_onto_candidates():
     assert acl[0].dropped_fields == ("hit_counters",)
 
     route = render(IP_ROUTE, command="show ip route")
-    assert route[0].dropped_fields == ()            # declared lossless
+    assert route[0].dropped_fields == (             # decision 20: declared drops
+        "route_age", "ecmp_alternate_paths", "subnet_group_headers"
+    )
 
 
 def test_every_registry_entry_declares_a_manifest():

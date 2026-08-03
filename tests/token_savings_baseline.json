@@ -1,8 +1,8 @@
 {
   "encoding": "o200k_base",
   "tiktoken_version": "0.13.0",
-  "total_raw_tokens": 3833,
-  "total_terse_tokens": 2313,
+  "total_raw_tokens": 5009,
+  "total_terse_tokens": 2937,
   "families": {
     "acl": {
       "raw_tokens": 49,
@@ -39,6 +39,18 @@
     "cdp": {
       "raw_tokens": 85,
       "terse_tokens": 34
+    },
+    "cisco_ios/show_ip_interface_brief": {
+      "raw_tokens": 120,
+      "terse_tokens": 91
+    },
+    "cisco_ios/show_ip_ospf_neighbor": {
+      "raw_tokens": 88,
+      "terse_tokens": 80
+    },
+    "cisco_ios/show_ip_route": {
+      "raw_tokens": 968,
+      "terse_tokens": 441
     },
     "counters-errors": {
       "raw_tokens": 187,
@@ -90,11 +102,11 @@
     },
     "ip-route": {
       "raw_tokens": 138,
-      "terse_tokens": 115
+      "terse_tokens": 121
     },
     "ip-route-vrf": {
       "raw_tokens": 138,
-      "terse_tokens": 115
+      "terse_tokens": 121
     },
     "juniper_junos/show_interfaces_terse": {
       "raw_tokens": 163,

@@ -264,6 +264,13 @@ def test_empty_output_returns_empty():
     assert optimize("show interface status", "") == ""
 
 
-def test_ios_ip_route_still_compresses():
-    out = optimize("show ip route", IP_ROUTE)
-    assert "proto,prefix,ad/metric,next_hop,interface" in out
+def test_ios_ip_route_golden():
+    """The post-decision-20 baseline for the route family, pinned exactly
+    (this family is exempt from snapshot parity — see test_parity.py)."""
+    assert optimize("show ip route", IP_ROUTE) == (
+        "proto,prefix,ad/metric,next_hop,interface\n"
+        "O,10.1.1.0/24,110/20,10.0.0.1,GigabitEthernet0/1\n"
+        "O,10.1.2.0/24,110/30,10.0.0.1,GigabitEthernet0/1\n"
+        "C,10.0.0.0/24,,,GigabitEthernet0/0\n"
+        "S*,0.0.0.0/0,1/0,192.168.1.1,"
+    )

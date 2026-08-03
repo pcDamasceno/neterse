@@ -2,6 +2,36 @@
 
 ## 0.4.0 — Phase 3: community launch
 
+### Live-lab verification (post-release-candidate)
+
+Verified against real devices (containerlab `cisco_iol` ×4, IOS 17.12.1,
+OSPF summarization lab): 56 captures, 60% total reduction, and the
+parity replay byte-identical to the baseline everywhere — which proved
+the baseline itself wrong twice. Both fixes ship in 0.4.0:
+
+- **`show ip route` rewritten (decision 20, baseline change).** The
+  legacy regex silently dropped every route with a two-token protocol
+  code (`O IA`, `O E2`, `D EX`, …) — on the lab that was 9 of 19 routes,
+  i.e. every learned route — rendered `is` as the interface of connected
+  routes, and leaked route-age into other columns, all declared
+  lossless. Now every route row survives with clean columns; remaining
+  drops are declared (`route_age`, `ecmp_alternate_paths`,
+  `subnet_group_headers`). This family is exempt from snapshot parity
+  via the suite's new `INTENTIONAL_DIVERGENCES` registry and pinned by
+  its own goldens instead. Honest side effect: the family's reduction
+  is now ~70%, not 93% — the difference was deleted data.
+- **`show ip interface brief` admin-down fix (decision 21, additive).**
+  `administratively down` split across the status and protocol columns
+  with the real protocol column never read. Byte-identical on the frozen
+  corpus; real-capture golden pins the fix.
+- Real captures committed as `tests/fixtures/cisco_ios/` (route table,
+  interface brief, OSPF neighbors); goldens in
+  `tests/test_cisco_real_captures.py`.
+- Known gaps confirmed by the audit on live traffic, ranked: `show ip
+  ospf database`, `show ip protocols`, `show interfaces description`,
+  `show ip ospf interface brief`, and IOL-spaced `show cdp neighbors`
+  (`Eth 0/0`) — all fail open, none lose data.
+
 Default-path outputs for all legacy families remain byte-identical to
 the frozen baseline (parity cross-matrix). New vendor families are
 post-baseline: covered behaviorally, never allowed to change a legacy
