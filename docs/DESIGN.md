@@ -1,8 +1,9 @@
 # terse — design, topology, and plan
 
-*Status: Phase 2 shipped (0.3.0). This document is the project's source
-of truth for architecture and roadmap; decisions recorded here are
-binding until a new entry supersedes them.*
+*Status: Phase 3 shipped (0.4.0); the PyPI publish itself awaits the
+maintainer's tag (docs/RELEASING.md). This document is the project's
+source of truth for architecture and roadmap; decisions recorded here
+are binding until a new entry supersedes them.*
 
 ## The problem
 
@@ -45,6 +46,9 @@ faithful representation before it enters model context.
         │  render() → [Candidate(text, method, source, dropped_fields,    │
         │             profile)]                                           │
         │  every path FAIL-OPEN · candidates only ever shrink             │
+        │                                                                 │
+        │  audit.py — `terse audit` CLI: coverage/opportunity report      │
+        │  over (command, platform?, raw) corpora, incl. lossiness review │
         └────────────────────────────────┬────────────────────────────────┘
                                          ▼
                      consumer policy: smallest-wins, ledgers,
@@ -125,7 +129,7 @@ iter_compressors() / iter_entries()    # registry views
 | 0 | Extract from dbcli verbatim; freeze API (`render`/`Candidate`/`optimize`/`register`); parity baseline + cross-matrix suite; zero-dep packaging | ✅ shipped |
 | 1 | Spec engine (generic strategies over dict specs); 9/15 families converted; platform-keyed dispatch; lossiness manifests on every entry | ✅ shipped (0.2.0) |
 | 2 | **Parsed tier**: `parsed=` accepts pre-parsed rows → field projection + compact encoders (`parsed:csv` beats `json.dumps(rows)` by ~45–50%; `parsed:toon` adds the explicit row count); opt-in `profile=` projections with inline omission markers (`updown` ships first); `kv_extract` strategy moved `show version` to a spec (10 specs + 5 code) | ✅ shipped (0.3.0) |
-| 3 | **Community launch**: PyPI release (`terse-net`; PEP 541 request for `terse`), fixture-per-file contribution layout, `terse audit` coverage tool (port of dbcli's run analyzer), CI token-savings regression with a pinned tokenizer, multi-vendor expansion (Arista EOS, Juniper Junos, Aruba, MikroTik) | ▢ |
+| 3 | **Community launch**: `terse audit` coverage CLI + parity replay ports, fixture-per-file layout (`tests/fixtures/<platform>/<family>/`), CI token-savings regression (pinned `o200k_base`, committed baseline, 35% floor), 9 new families across Arista EOS / Junos / Aruba AOS-CX / MikroTik, release workflow via PyPI Trusted Publishing | ✅ shipped (0.4.0) — tag + PEP 541 request are maintainer actions ([RELEASING.md](RELEASING.md)) |
 | 4 | dbcli (and other consumers) swap their vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ▢ |
 
 The inputs each of those phases needs from the consumer side — the seam
@@ -169,6 +173,11 @@ competes with the parser projects.
 | 12 | `full` is an alias of `default` | The omission marker tells the model `re-query profile=full`; that spelling must actually work. Aliasing beats renaming the default (which would move bytes) and beats a marker pointing at a profile that doesn't exist. |
 | 13 | `show version` conversion may change `Candidate.source`, never text | Byte-parity governs rendering text; entry names are consumer-visible telemetry, not payload. `_compress_version` → `spec:cisco/show_version` is the recorded precedent. |
 | 14 | Parsed-tier profiles project by field-NAME pattern | Parser schemas differ per ecosystem (ntc: `intf`/`status`; Genie: `oper_state`…), so a name-pattern table is the only command-independent way to project. A profile whose patterns keep nothing (or everything) falls back to complete — it never guesses. |
+| 15 | The parity cross-matrix is CLOSED at the legacy corpus | Post-baseline families (Phase 3+) can't be byte-compared against a snapshot that predates them. They are covered behaviorally instead (diagonal shrink, winner-is-own-spec, wrong-platform skip, fail-open matrix through terse itself), register strictly AFTER the legacy sequence, and the legacy matrix automatically polices that they never change a legacy pair's result — identical-output ties are permitted and resolve to the earlier (baseline) entry. |
+| 16 | Fixture layout: `tests/fixtures/<platform>/<family>/commands.txt` + `raw.txt` | Byte-exact raw bodies (fixed-width offsets are data), reviewable diffs, platform carried by the path, and the audit CLI ingests the same tree — one layout for contribution, testing, and coverage measurement. The in-module `corpus.py` stays as the frozen legacy baseline set (decision 9). |
+| 17 | The audit CLI ships in the package; the parity replay does not | `terse audit` needs only the public registry — it is the consumer-facing coverage story (`terse audit run.jsonl`). The replay compares against `tests/legacy_snapshot.py`, a repo artifact deliberately excluded from the wheel, so it lives in `scripts/`. |
+| 18 | Token regression: pinned tokenizer, committed baseline, 35% aggregate floor | CI measures the actual claim (tokens under `o200k_base`, `tiktoken==0.13.0`) per family against `tests/token_savings_baseline.json`; regeneration is a recorded decision. Runtime keeps chars/4 (decision 8) — the tokenizer never becomes a dependency. |
+| 19 | `fixed_width_table` grows a `row_match` spec key | Arista (`Et1`) and Aruba (`1/1/1`) port names don't fit the shared Cisco interface-name pattern. A per-spec row matcher keeps the strategy generic; the DEFAULT stays the Cisco pattern so every legacy rendering is untouched. |
 
 ## Provenance
 

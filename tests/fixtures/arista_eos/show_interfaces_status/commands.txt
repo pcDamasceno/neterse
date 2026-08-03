@@ -1,0 +1,3 @@
+show interfaces status
+show interface status
+show int status

@@ -1,0 +1,2 @@
+show interface brief
+show interfaces brief

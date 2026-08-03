@@ -19,18 +19,34 @@ The bar is deliberately low; the CI gates are deliberately strict.
 },
 ```
 
-2. **Add fixtures** to `tests/corpus.py`: a realistic raw sample (build
-   fixed-width tables with `.ljust` so column offsets are exact) and an
-   entry in `COMMAND_FIXTURES` pairing it with the command spelling(s)
-   agents actually type.
+2. **Register it** at the END of `REGISTRY` in `terse/registry.py` —
+   post-baseline entries always append after the legacy sequence, so
+   equal-length ties keep resolving to the baseline (decision 15).
 
-3. **Run `pytest`.** The suite auto-covers your family: the diagonal test
-   asserts it genuinely shrinks, the cross-matrix asserts it fails open
-   against every other family's output and edge inputs, and the manifest
-   test rejects specs without `dropped_fields`.
+3. **Add fixture files** under
+   `tests/fixtures/<platform>/<family>/`:
+   - `raw.txt` — one byte-exact real capture. Never normalize
+     whitespace; fixed-width column offsets are data. Capture with
+     optimization disabled (or from a snapshot sink) so it is genuinely
+     raw.
+   - `commands.txt` — every command spelling agents actually type for
+     it, one per line (abbreviations and per-target variants included).
+
+4. **Run `pytest`.** The suite auto-covers anything in `tests/fixtures/`:
+   the diagonal asserts your family genuinely shrinks (with and without
+   the platform argument) and that the winner is your spec — not a false
+   match; the cross-matrix asserts it fails open against every other
+   family's output and the edge inputs; the manifest test rejects specs
+   without `dropped_fields`. If the token CI job flags a missing
+   baseline entry, run `python scripts/update_token_baseline.py` and
+   commit the diff.
 
 That's the whole contribution. In the PR description, paste the
-before/after character counts for your fixture.
+before/after character counts — `terse audit tests/fixtures` prints them.
+
+Found the gap in a real agent run? `terse audit run.jsonl --show 3`
+ranks uncovered families by wasted volume and dumps the head of each, so
+the format can be read before the spec is written.
 
 ## Rules the CI enforces (and reviewers care about)
 
@@ -50,7 +66,13 @@ before/after character counts for your fixture.
 - **Byte-parity discipline.** Don't edit `tests/legacy_snapshot.py`, ever.
   If you believe an existing family's *output* should change, that's a
   baseline decision: propose it in an issue; if accepted it gets a
-  decision-log entry in `docs/DESIGN.md` alongside the code change.
+  decision-log entry in `docs/DESIGN.md` alongside the code change. The
+  same applies to `tests/token_savings_baseline.json` — regenerating it
+  to green a build without a recorded decision defeats the gate.
+- **New families never claim legacy pairs.** The parity cross-matrix
+  runs your entry against every legacy (command, body) combination
+  automatically; if your regex changes any legacy result, tighten it
+  (identical-output ties are fine — registry order resolves them).
 
 ## When a spec genuinely can't express it
 

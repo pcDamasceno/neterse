@@ -1,0 +1,6 @@
+Port       Name               Status       Vlan       Duplex  Speed   Type
+Et1        to-spine1          connected    routed     full    10G     10GBASE-SR
+Et2        to-spine2          connected    routed     full    10G     10GBASE-SR
+Et3                           notconnect   1          auto    auto    10GBASE-SR
+Po10       mlag-peer          connected    trunk      full    20G     N/A
+Ma1        oob                connected    routed     a-full  a-1G    10/100/1000

@@ -1,0 +1,144 @@
+{
+  "encoding": "o200k_base",
+  "tiktoken_version": "0.13.0",
+  "total_raw_tokens": 3833,
+  "total_terse_tokens": 2313,
+  "families": {
+    "acl": {
+      "raw_tokens": 49,
+      "terse_tokens": 32
+    },
+    "arista_eos/show_interfaces_status": {
+      "raw_tokens": 131,
+      "terse_tokens": 29
+    },
+    "arista_eos/show_ip_arp": {
+      "raw_tokens": 106,
+      "terse_tokens": 97
+    },
+    "arista_eos/show_vlan": {
+      "raw_tokens": 48,
+      "terse_tokens": 40
+    },
+    "aruba_aoscx/show_interface_brief": {
+      "raw_tokens": 110,
+      "terse_tokens": 87
+    },
+    "aruba_aoscx/show_vlan": {
+      "raw_tokens": 81,
+      "terse_tokens": 72
+    },
+    "bgp-summary": {
+      "raw_tokens": 126,
+      "terse_tokens": 32
+    },
+    "bgp-summary-bare": {
+      "raw_tokens": 126,
+      "terse_tokens": 32
+    },
+    "cdp": {
+      "raw_tokens": 85,
+      "terse_tokens": 34
+    },
+    "counters-errors": {
+      "raw_tokens": 187,
+      "terse_tokens": 103
+    },
+    "eigrp": {
+      "raw_tokens": 162,
+      "terse_tokens": 123
+    },
+    "eigrp-vrf": {
+      "raw_tokens": 162,
+      "terse_tokens": 123
+    },
+    "etherchannel": {
+      "raw_tokens": 126,
+      "terse_tokens": 34
+    },
+    "intf-brief-nxos": {
+      "raw_tokens": 68,
+      "terse_tokens": 56
+    },
+    "intf-detail-down": {
+      "raw_tokens": 106,
+      "terse_tokens": 43
+    },
+    "intf-detail-ios": {
+      "raw_tokens": 70,
+      "terse_tokens": 56
+    },
+    "intf-detail-nxos": {
+      "raw_tokens": 335,
+      "terse_tokens": 60
+    },
+    "intf-status": {
+      "raw_tokens": 122,
+      "terse_tokens": 92
+    },
+    "intf-status-single": {
+      "raw_tokens": 122,
+      "terse_tokens": 92
+    },
+    "ip-int-brief": {
+      "raw_tokens": 79,
+      "terse_tokens": 57
+    },
+    "ip-int-brief-abbrev": {
+      "raw_tokens": 79,
+      "terse_tokens": 57
+    },
+    "ip-route": {
+      "raw_tokens": 138,
+      "terse_tokens": 115
+    },
+    "ip-route-vrf": {
+      "raw_tokens": 138,
+      "terse_tokens": 115
+    },
+    "juniper_junos/show_interfaces_terse": {
+      "raw_tokens": 163,
+      "terse_tokens": 163
+    },
+    "juniper_junos/show_ospf_neighbor": {
+      "raw_tokens": 82,
+      "terse_tokens": 75
+    },
+    "lldp": {
+      "raw_tokens": 85,
+      "terse_tokens": 34
+    },
+    "mikrotik_routeros/interface_print": {
+      "raw_tokens": 101,
+      "terse_tokens": 67
+    },
+    "mikrotik_routeros/ip_address_print": {
+      "raw_tokens": 100,
+      "terse_tokens": 77
+    },
+    "ospf-neighbor": {
+      "raw_tokens": 93,
+      "terse_tokens": 84
+    },
+    "portchannel": {
+      "raw_tokens": 126,
+      "terse_tokens": 34
+    },
+    "run-abbrev": {
+      "raw_tokens": 66,
+      "terse_tokens": 41
+    },
+    "running-config": {
+      "raw_tokens": 66,
+      "terse_tokens": 41
+    },
+    "version": {
+      "raw_tokens": 147,
+      "terse_tokens": 74
+    },
+    "vlan-brief": {
+      "raw_tokens": 48,
+      "terse_tokens": 42
+    }
+  }
+}

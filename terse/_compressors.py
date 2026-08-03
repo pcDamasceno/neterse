@@ -43,16 +43,21 @@ def _csv_row(fields: list) -> str:
     return ",".join(out)
 
 
-def _fixed_width_rows(raw: str, keywords: list) -> Optional[list]:
+def _fixed_width_rows(raw: str, keywords: list, name_re: Optional[re.Pattern] = None) -> Optional[list]:
     """Parse a fixed-width table whose columns start at the ``keywords`` header.
 
     NX-OS status/brief tables pad columns and let a ``Name`` / ``Reason`` field
     carry spaces, so a plain whitespace split corrupts them. Instead we find the
     header line, record each column's start offset, and slice every data row at
     those offsets. Header, dashed-separator and wrapped-continuation lines are
-    skipped; only lines whose first column is an interface name are kept.
-    Returns ``None`` when the header is absent (caller falls back to raw).
+    skipped; only lines whose first column matches ``name_re`` (default: the
+    Cisco-family interface-name pattern — vendor specs whose port names differ,
+    e.g. Arista ``Et1`` or Aruba ``1/1/1``, pass their own via the spec's
+    ``row_match`` key) are kept. Returns ``None`` when the header is absent
+    (caller falls back to raw).
     """
+    if name_re is None:
+        name_re = _IFACE_NAME_RE
     lines = raw.splitlines()
     positions: Optional[list] = None
     start = 0
@@ -81,7 +86,7 @@ def _fixed_width_rows(raw: str, keywords: list) -> Optional[list]:
         if not line.strip() or set(line.strip()) <= {"-"}:
             continue
         head = line[bounds[0]:bounds[1]].split()
-        if not head or not _IFACE_NAME_RE.match(head[0]):
+        if not head or not name_re.match(head[0]):
             continue
         rows.append([line[bounds[k]:bounds[k + 1]].strip() for k in range(len(positions))])
     return rows

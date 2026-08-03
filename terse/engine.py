@@ -21,7 +21,10 @@ Strategies:
 ``fixed_width_table``
     Offset-sliced fixed-width table → CSV, driven by the header keywords
     (see ``_compressors._fixed_width_rows``). Spec keys: ``keywords``,
-    ``header``.
+    ``header``, and optionally ``row_match`` — a regex a data row's first
+    column must match (default: the Cisco-family interface-name pattern;
+    vendors with other port-name shapes, e.g. Arista ``Et1`` or Aruba
+    ``1/1/1``, declare their own).
 
 ``kv_extract`` (Phase 2)
     First-match field scan → one ``key=value | key=value`` line. Spec
@@ -151,9 +154,13 @@ def _fixed_width_table(
 
     keywords = list(spec["keywords"])
     header = spec["header"] if projection is None else projection[1]
+    name_re = (
+        re.compile(spec["row_match"], re.IGNORECASE)
+        if spec.get("row_match") else None
+    )
 
     def _compress(raw: str) -> str:
-        rows = _fixed_width_rows(raw, keywords)
+        rows = _fixed_width_rows(raw, keywords, name_re)
         if not rows:
             return raw
         out = [header]

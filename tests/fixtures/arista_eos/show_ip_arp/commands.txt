@@ -1,0 +1,2 @@
+show ip arp
+show ip arp vrf default

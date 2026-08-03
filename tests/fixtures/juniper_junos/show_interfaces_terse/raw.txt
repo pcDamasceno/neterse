@@ -1,0 +1,10 @@
+Interface               Admin Link Proto    Local                 Remote
+ge-0/0/0                up    up
+ge-0/0/0.0              up    up   inet     10.0.0.1/30
+ge-0/0/1                up    down
+ge-0/0/1.0              up    down inet     10.0.0.5/30
+gr-0/0/0                up    up
+lo0                     up    up
+lo0.0                   up    up   inet     192.168.255.1         --> 0/0
+fxp0                    up    up
+fxp0.0                  up    up   inet     172.28.136.10/23

@@ -31,7 +31,12 @@ MARKER_STATUS = omission_marker(("name", "vlan", "duplex", "speed", "type"))
 # ---------------------------------------------------------------------------
 
 def test_updown_on_interface_status_keeps_port_and_status_only():
-    (cand,) = render(STATUS, command="show interface status", profile="updown")
+    # platform pins the Cisco entry; the Arista status spec also parses
+    # this body (an expected, tie-resolved overlap) on the default path
+    (cand,) = render(
+        STATUS, command="show interface status",
+        platform="cisco_nxos", profile="updown",
+    )
     lines = cand.text.splitlines()
     assert lines[0] == "port,status"
     assert "Eth1/11,connected" in lines
@@ -41,7 +46,7 @@ def test_updown_on_interface_status_keeps_port_and_status_only():
     # manifest = base drops + projected-out columns
     assert cand.dropped_fields == ("name", "vlan", "duplex", "speed", "type")
     # and it is smaller than the complete rendering, which is the point
-    (full,) = render(STATUS, command="show interface status")
+    (full,) = render(STATUS, command="show interface status", platform="cisco_nxos")
     assert len(cand.text) < len(full.text)
 
 
@@ -66,11 +71,19 @@ def test_updown_on_nxos_brief_keeps_reason():
 
 
 def test_marker_names_the_recovery_path():
-    (cand,) = render(STATUS, command="show interface status", profile="updown")
+    (cand,) = render(
+        STATUS, command="show interface status",
+        platform="cisco_nxos", profile="updown",
+    )
     assert "re-query profile=full" in cand.text.splitlines()[-1]
     # and the alias it advertises really is the complete rendering
-    (full,) = render(STATUS, command="show interface status", profile="full")
-    (default,) = render(STATUS, command="show interface status")
+    (full,) = render(
+        STATUS, command="show interface status",
+        platform="cisco_nxos", profile="full",
+    )
+    (default,) = render(
+        STATUS, command="show interface status", platform="cisco_nxos"
+    )
     assert full.text == default.text
 
 

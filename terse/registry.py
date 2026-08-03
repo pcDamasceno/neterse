@@ -136,6 +136,17 @@ REGISTRY: List[Entry] = [
         _c._compress_portchannel_summary,
         dropped_fields=(),
     ),
+    # -- Phase-3 vendor expansion: strictly AFTER the legacy sequence, so
+    #    equal-length ties keep resolving to the baseline entries.
+    _spec_entry(_BY_ID["arista_eos/show_interfaces_status"]),
+    _spec_entry(_BY_ID["arista_eos/show_ip_arp"]),
+    _spec_entry(_BY_ID["arista_eos/show_vlan"]),
+    _spec_entry(_BY_ID["juniper_junos/show_interfaces_terse"]),
+    _spec_entry(_BY_ID["juniper_junos/show_ospf_neighbor"]),
+    _spec_entry(_BY_ID["aruba_aoscx/show_interface_brief"]),
+    _spec_entry(_BY_ID["aruba_aoscx/show_vlan"]),
+    _spec_entry(_BY_ID["mikrotik_routeros/ip_address_print"]),
+    _spec_entry(_BY_ID["mikrotik_routeros/interface_print"]),
 ]
 
 

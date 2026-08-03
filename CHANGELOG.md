@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.4.0 — Phase 3: community launch
+
+Default-path outputs for all legacy families remain byte-identical to
+the frozen baseline (parity cross-matrix). New vendor families are
+post-baseline: covered behaviorally, never allowed to change a legacy
+result (decision 15).
+
+- **`terse audit`** (`terse/audit.py`, console script `terse` /
+  `python -m terse`): the coverage tool, ported from dbcli's run
+  analyzer. Feed it `(command, platform?, raw)` samples — JSONL files,
+  fixture directories, raw captures with `--command`, or stdin — and it
+  reports per-family reduction, totals (chars/4 token estimate),
+  covered/uncovered volume, and the OPPORTUNITIES list (`NO COMPRESSOR`,
+  `false-match:<entry>`, and the 0.2.0-registry addition
+  `platform-skip:<entry>`), plus each winning entry's declared
+  `dropped_fields` so an audit doubles as a lossiness review. `--show N`
+  dumps the heads of the largest gaps; `--fail-under PCT` gates CI.
+- **Parity replay** (`scripts/replay_parity.py`): replay any corpus
+  through the frozen baseline and current terse, unified-diff and exit 1
+  on byte differences. Repo-side by design — the baseline isn't shipped.
+- **Fixture-per-file contribution layout**:
+  `tests/fixtures/<platform>/<family>/{commands.txt,raw.txt}` — the
+  audit CLI reads the same layout. Every fixture dropped there is
+  auto-covered by the suite: diagonal shrink (with and without
+  platform), winner-is-own-spec, wrong-platform skip, and a fail-open
+  cross-matrix through terse itself.
+- **Multi-vendor expansion** (9 new spec families, registered strictly
+  after the legacy sequence): Arista EOS (interfaces status, ip arp,
+  vlan), Juniper Junos (interfaces terse, ospf neighbor), Aruba AOS-CX
+  (interface brief, vlan), MikroTik RouterOS (/ip address print,
+  /interface print). `fixed_width_table` gains an optional `row_match`
+  spec key for non-Cisco port names (`Et1`, `1/1/1`); the default stays
+  the Cisco pattern, preserving byte-parity. Registry: 19 specs + 5
+  code compressors.
+- **Token-savings regression** (`tests/test_token_savings.py`, CI job):
+  savings measured with a real, pinned tokenizer (`tiktoken==0.13.0`,
+  `o200k_base`) against a committed per-family baseline
+  (34 families: 3833 → 2313 tokens, 39.7% saved) with a 35% aggregate
+  floor. Skips locally without tiktoken; runtime stays chars/4
+  (decision 8). Regenerate with `scripts/update_token_baseline.py` —
+  a recorded decision, like byte-parity changes.
+- **Release machinery**: `release.yml` publishes `terse-net` to PyPI via
+  Trusted Publishing on a `v*` tag (tag/version lockstep check + wheel
+  smoke test); human steps in `docs/RELEASING.md`, including the PEP 541
+  plan for the `terse` name.
+
 ## 0.3.0 — Phase 2: parsed tier, profiles, kv_extract
 
 Outputs on the default path (no `parsed`, no `profile`, no `platform`)

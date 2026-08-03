@@ -114,14 +114,39 @@ uniform tables is on the roadmap.
 | 0 | API frozen (`render`/`Candidate`/`optimize`/`register`); 15 compressor families extracted verbatim; byte-parity baseline | ✅ |
 | 1 | Spec engine (generic strategies over declarative specs), platform-keyed dispatch, declared-lossiness manifests | ✅ |
 | 2 | Parsed tier: field projection + compact encoders (CSV/TOON) over pre-parsed rows; opt-in profiles with inline omission markers; `kv_extract` strategy | ✅ |
-| 3 | PyPI release, fixture-per-file contribution flow, `terse audit` coverage tool, multi-vendor expansion (Arista, Juniper, …) | ▢ |
+| 3 | `terse audit` coverage tool, fixture-per-file contribution flow, CI token-savings regression (pinned tokenizer), multi-vendor expansion (Arista EOS, Junos, Aruba AOS-CX, MikroTik), PyPI release machinery | ✅ |
+| 4 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
+
+## Coverage
+
+Command families ship for **Cisco IOS/IOS-XE/NX-OS** (15 legacy families:
+routes, interfaces, BGP/OSPF/EIGRP neighbors, CDP/LLDP, VLANs, ACLs,
+counters, port-channels, version, running-config), **Arista EOS**
+(interfaces status, ip arp, vlan), **Juniper Junos** (interfaces terse,
+ospf neighbor), **Aruba AOS-CX** (interface brief, vlan) and **MikroTik
+RouterOS** (`/ip address print`, `/interface print`) — and the parsed
+tier covers anything your parser already handles, on any platform.
+
+Measure coverage over your own agent's traffic with the bundled CLI:
+
+```bash
+terse audit run.jsonl --show 3      # {"command":..., "platform":..., "raw":...} per line
+terse audit tests/fixtures          # or point it at a fixture tree
+```
+
+It reports per-family reduction, what reached the model uncompressed
+(`NO COMPRESSOR` / `false-match` / `platform-skip`), and each winning
+entry's declared drops — the gaps it prints are, in order, the next
+specs worth contributing.
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: most new command
-families are **a spec dict plus two fixtures** — no parser code. The
-escape hatch for stateful formats is a plain function under the same
-fail-open contract.
+families are **a spec dict plus two fixture files**
+(`tests/fixtures/<platform>/<family>/{commands.txt,raw.txt}`) — no parser
+code, and the suite auto-covers anything dropped there. The escape hatch
+for stateful formats is a plain function under the same fail-open
+contract.
 
 ## License
 

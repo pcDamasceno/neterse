@@ -1,0 +1,2 @@
+show ospf neighbor
+show ospf neigh

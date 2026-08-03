@@ -207,4 +207,162 @@ SPECS: list = [
         "context_prefixes": ["IP-EIGRP neighbors", "EIGRP-IPv4"],
         "dropped_fields": (),
     },
+    # -----------------------------------------------------------------------
+    # Phase-3 multi-vendor expansion. Fixtures live per-file under
+    # tests/fixtures/<platform>/<family>/. These entries register AFTER the
+    # legacy families (registry.py), so equal-length ties keep resolving to
+    # the baseline — and the parity cross-matrix polices that none of them
+    # ever claims a legacy (command, body) pair with a different result.
+    # -----------------------------------------------------------------------
+    {
+        "id": "arista_eos/show_interfaces_status",
+        "command": r"^show\s+int(?:erface|erfaces)?(?:\s+\S+)?\s+status\s*$",
+        "platforms": r"eos|arista",
+        "strategy": "fixed_width_table",
+        "keywords": ["Port", "Name", "Status", "Vlan", "Duplex", "Speed", "Type"],
+        "header": "port,name,status,vlan,duplex,speed,type",
+        # EOS ports: Et1, Et3/1, Po10, Ma1, Vlan10, Lo0, Tu0 (also matches
+        # Cisco Eth1/1 — identical output to the Cisco entry there, and the
+        # earlier entry wins the tie).
+        "row_match": r"^(?:et|po|ma|vl|lo|tu)\w*\d",
+        "dropped_fields": (),
+        "profiles": {"updown": {"keep": ["port", "status"]}},
+        "doc": "show interfaces status (Arista EOS) -> CSV.",
+    },
+    {
+        "id": "arista_eos/show_ip_arp",
+        "command": r"show\s+ip\s+arp",
+        "platforms": r"eos|arista",
+        "strategy": "line_regex_table",
+        "row": (
+            r"^(\d+\.\d+\.\d+\.\d+)\s+"                              # address
+            r"([\d:]+)\s+"                                             # age
+            r"([0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\.[0-9a-fA-F]{4})\s+"  # MAC
+            r"(.+)$"                                                   # interface(s)
+        ),
+        "header": "address,age,mac,interface",
+        "strip_columns": [4],
+        "dropped_fields": (),
+    },
+    {
+        "id": "arista_eos/show_vlan",
+        # bare `show vlan` — the Cisco family spells it `show vlan brief`
+        "command": r"^show\s+vlan\s*$",
+        "platforms": r"eos|arista",
+        "strategy": "line_regex_table",
+        "row": (
+            r"^(\d+)\s+"                   # VLAN ID
+            r"(\S+)\s+"                    # name
+            r"(active|act/unsup|sus\S*)\s*"  # status
+            r"(.*)?$"                      # ports
+        ),
+        "header": "vlan,name,status,ports",
+        "strip_columns": [4],
+        "dropped_fields": (),
+    },
+    {
+        "id": "juniper_junos/show_interfaces_terse",
+        "command": r"^show\s+int(?:erfaces?)?\s+terse(?:\s+\S+)?\s*$",
+        "platforms": r"junos|juniper",
+        "strategy": "line_regex_table",
+        "row": (
+            r"^(\S+)\s+"           # interface / unit
+            r"(up|down)\s+"        # admin
+            r"(up|down)"           # link
+            r"(?:\s+(\S+))?"       # proto (inet, inet6, eth-switch, ...)
+            r"(?:\s+(.+))?$"       # local [+ remote]
+        ),
+        "header": "interface,admin,link,proto,address",
+        "strip_columns": [5],
+        "dropped_fields": (),
+        "profiles": {"updown": {"keep": ["interface", "admin", "link"]}},
+        "doc": "show interfaces terse (Junos) -> CSV; local+remote merge "
+               "into the address column.",
+    },
+    {
+        "id": "juniper_junos/show_ospf_neighbor",
+        # `show ospf neighbor` — the Cisco family requires `show ip ospf`
+        "command": r"^show\s+ospf\s+neigh(?:bor)?\s*$",
+        "platforms": r"junos|juniper",
+        "strategy": "line_regex_table",
+        "row": (
+            r"^(\d+\.\d+\.\d+\.\d+)\s+"  # address
+            r"(\S+)\s+"                    # interface
+            r"(\S+)\s+"                    # state
+            r"(\d+\.\d+\.\d+\.\d+)\s+"   # neighbor ID
+            r"(\d+)\s+"                    # priority
+            r"(\d+)$"                      # dead
+        ),
+        "header": "address,interface,state,neighbor_id,priority,dead",
+        "dropped_fields": (),
+    },
+    {
+        "id": "aruba_aoscx/show_interface_brief",
+        # bare `show interface brief` — NX-OS spells per-interface variants
+        # and its table has an `Ethernet` keyword header, so the two
+        # fixed-width specs can never both parse the same body.
+        "command": r"^show\s+int(?:erface|erfaces)?\s+brief\s*$",
+        "platforms": r"aruba|aoscx|aos_cx|procurve",
+        "strategy": "fixed_width_table",
+        "keywords": ["Port", "Native", "Mode", "Type", "Enabled", "Status",
+                     "Reason", "Speed", "Description"],
+        "header": "port,native_vlan,mode,type,enabled,status,reason,speed,description",
+        "row_match": r"^\d+/\d+/\d+",     # AOS-CX member/slot/port names
+        "dropped_fields": (),
+        "profiles": {"updown": {"keep": ["port", "status", "reason"]}},
+        "doc": "show interface brief (Aruba AOS-CX) -> CSV; wrapped header "
+               "and separators dropped.",
+    },
+    {
+        "id": "aruba_aoscx/show_vlan",
+        "command": r"^show\s+vlan\s*$",
+        "platforms": r"aruba|aoscx|aos_cx|procurve",
+        "strategy": "line_regex_table",
+        # AOS-CX status is up/down (the Arista/Cisco family says `active`),
+        # which keeps the two bare-`show vlan` specs from cross-parsing.
+        "row": (
+            r"^(\d+)\s+"       # VLAN ID
+            r"(\S+)\s+"        # name
+            r"(up|down)\s+"    # status
+            r"(\S+)\s+"        # reason
+            r"(\S+)\s*"        # type
+            r"(.*)?$"          # interfaces
+        ),
+        "header": "vlan,name,status,reason,type,interfaces",
+        "strip_columns": [6],
+        "dropped_fields": (),
+    },
+    {
+        "id": "mikrotik_routeros/ip_address_print",
+        "command": r"^/ip\s+address\s+print",
+        "platforms": r"mikrotik|routeros",
+        "strategy": "line_regex_table",
+        "row": (
+            r"^(\d+)\s+"                       # item number
+            r"(?:([A-Z]{1,3})\s+)?"            # flags (D, X, I, ...)
+            r"(\d+\.\d+\.\d+\.\d+/\d+)\s+"   # address
+            r"(\d+\.\d+\.\d+\.\d+)\s+"       # network
+            r"(\S+)$"                          # interface
+        ),
+        "header": "num,flags,address,network,interface",
+        "dropped_fields": (),
+        "doc": "/ip address print (MikroTik RouterOS) -> CSV; the Flags "
+               "legend line is dropped.",
+    },
+    {
+        "id": "mikrotik_routeros/interface_print",
+        "command": r"^/interface\s+print",
+        "platforms": r"mikrotik|routeros",
+        "strategy": "line_regex_table",
+        "row": (
+            r"^(\d+)\s+"             # item number
+            r"(?:([A-Z]{1,3})\s+)?"  # flags (R running, D dynamic, X disabled)
+            r"(\S+)\s+"              # name
+            r"(\S+)\s+"              # type
+            r"(\d+)"                 # actual-mtu
+            r"(?:\s+(\d+))?$"        # l2mtu
+        ),
+        "header": "num,flags,name,type,mtu,l2mtu",
+        "dropped_fields": (),
+    },
 ]

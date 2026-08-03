@@ -1,0 +1,6 @@
+Flags: D - dynamic, X - disabled, R - running, S - slave
+ #     NAME                                TYPE       ACTUAL-MTU L2MTU
+ 0  R  ether1                              ether            1500  1598
+ 1     ether2                              ether            1500  1598
+ 2  R  bridge                              bridge           1500  1598
+ 3  RS vlan100                             vlan             1500  1594

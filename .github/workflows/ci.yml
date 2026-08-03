@@ -30,3 +30,15 @@ jobs:
           EOF
       - name: Tests (behavioral + byte-parity vs frozen baseline)
         run: pytest
+
+  token-savings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install with the PINNED tokenizer (CI-only; never a runtime dep)
+        run: pip install -e ".[test]" tiktoken==0.13.0
+      - name: Token-savings regression vs committed baseline (o200k_base)
+        run: pytest tests/test_token_savings.py -v
