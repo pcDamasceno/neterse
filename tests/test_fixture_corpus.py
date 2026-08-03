@@ -11,7 +11,7 @@ that lands in ``tests/fixtures/``:
 * a wrong platform can only ever remove the family's candidates, never
   corrupt them;
 * the full command x body cross-matrix (including the legacy corpus
-  bodies and edge inputs) stays fail-open through terse itself.
+  bodies and edge inputs) stays fail-open through neterse itself.
 
 The legacy parity cross-matrix in ``test_parity.py`` separately polices
 that these post-baseline entries never change a legacy pair's result.
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from terse import render
+from neterse import render
 
 from .corpus import ALL_BODIES, EDGE_INPUTS
 from .fixture_corpus import FILE_FIXTURES, FIXTURE_ROOT
@@ -101,7 +101,7 @@ def test_audit_tool_reads_this_layout():
     coverage over it — the contribution flow's smoke test."""
     import io
 
-    from terse.audit import load_samples, run_report
+    from neterse.audit import load_samples, run_report
 
     samples = load_samples([str(FIXTURE_ROOT)], command=None)
     assert len(samples) >= sum(len(f.commands) for f in FILE_FIXTURES)

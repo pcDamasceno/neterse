@@ -63,18 +63,18 @@ def test_no_family_regresses_and_corpus_is_stable(enc, baseline):
             f"{m['raw_tokens']} tokens) — corpus edits require a "
             "baseline regeneration (a recorded decision)"
         )
-        allowed = int(b["terse_tokens"] * (1 + TOLERANCE)) + 1
-        assert m["terse_tokens"] <= allowed, (
+        allowed = int(b["neterse_tokens"] * (1 + TOLERANCE)) + 1
+        assert m["neterse_tokens"] <= allowed, (
             f"{label}: token savings regressed — "
-            f"{b['terse_tokens']} -> {m['terse_tokens']} tokens"
+            f"{b['neterse_tokens']} -> {m['neterse_tokens']} tokens"
         )
 
 
 def test_total_savings_hold_the_headline_floor(enc):
     measured = measure(enc)
     tot_raw = sum(m["raw_tokens"] for m in measured.values())
-    tot_terse = sum(m["terse_tokens"] for m in measured.values())
-    savings = 1 - tot_terse / tot_raw
+    tot_neterse = sum(m["neterse_tokens"] for m in measured.values())
+    savings = 1 - tot_neterse / tot_raw
     assert savings >= TOTAL_SAVINGS_FLOOR, (
         f"aggregate savings {savings:.1%} fell below the "
         f"{TOTAL_SAVINGS_FLOOR:.0%} floor"

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from terse import optimize, render
+from neterse import optimize, render
 
 from .corpus import (
     IP_INT_BRIEF,
@@ -94,7 +94,7 @@ def test_parsed_tier_is_command_independent():
     """One encoder covers every command the parsing ecosystems handle —
     no registry entry needs to match."""
     cands = render(
-        IP_INT_BRIEF, command="show some command terse has never heard of",
+        IP_INT_BRIEF, command="show some command neterse has never heard of",
         parsed=PARSED_IP_INT_BRIEF,
     )
     assert {c.source for c in cands} == {"parsed:csv", "parsed:toon"}

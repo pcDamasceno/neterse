@@ -1,4 +1,4 @@
-"""terse — the ``| brief`` the vendor never shipped.
+"""neterse — the ``| brief`` the vendor never shipped.
 
 Turns verbose network CLI output into the minimum-token representation
 for LLM context.
@@ -83,7 +83,7 @@ __all__ = [
     "__version__",
 ]
 
-logger = logging.getLogger("terse")
+logger = logging.getLogger("neterse")
 logger.addHandler(logging.NullHandler())
 
 
@@ -159,7 +159,7 @@ def render(
             result = fn(raw_output)
         except Exception:
             logger.debug(
-                "terse compressor %s failed for '%s', skipping",
+                "neterse compressor %s failed for '%s', skipping",
                 entry.name, command, exc_info=True,
             )
             continue
@@ -178,7 +178,7 @@ def render(
             encoded = _parsed_tier.encode(parsed, profile_key)
         except Exception:
             logger.debug(
-                "terse parsed tier failed for '%s', skipping",
+                "neterse parsed tier failed for '%s', skipping",
                 command, exc_info=True,
             )
             encoded = []

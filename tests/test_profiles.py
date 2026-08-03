@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from terse import render
-from terse.engine import build, omission_marker
+from neterse import render
+from neterse.engine import build, omission_marker
 
 from .corpus import (
     BRIEF,

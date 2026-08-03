@@ -1,11 +1,11 @@
-# Contributing to terse
+# Contributing to neterse
 
 Most contributions are **a spec dict plus fixtures — no parser code.**
 The bar is deliberately low; the CI gates are deliberately strict.
 
 ## Add a table-shaped command family (the common case)
 
-1. **Write the spec** in `terse/specs.py`:
+1. **Write the spec** in `neterse/specs.py`:
 
 ```python
 {
@@ -19,7 +19,7 @@ The bar is deliberately low; the CI gates are deliberately strict.
 },
 ```
 
-2. **Register it** at the END of `REGISTRY` in `terse/registry.py` —
+2. **Register it** at the END of `REGISTRY` in `neterse/registry.py` —
    post-baseline entries always append after the legacy sequence, so
    equal-length ties keep resolving to the baseline (decision 15).
 
@@ -42,9 +42,9 @@ The bar is deliberately low; the CI gates are deliberately strict.
    commit the diff.
 
 That's the whole contribution. In the PR description, paste the
-before/after character counts — `terse audit tests/fixtures` prints them.
+before/after character counts — `neterse audit tests/fixtures` prints them.
 
-Found the gap in a real agent run? `terse audit run.jsonl --show 3`
+Found the gap in a real agent run? `neterse audit run.jsonl --show 3`
 ranks uncovered families by wasted volume and dumps the head of each, so
 the format can be read before the spec is written.
 
@@ -77,7 +77,7 @@ the format can be read before the spec is written.
 ## When a spec genuinely can't express it
 
 Formats that carry state across lines (multi-line detail blocks, banner
-delimiters, multi-sub-table output) go in `terse/_compressors.py` as a
+delimiters, multi-sub-table output) go in `neterse/_compressors.py` as a
 plain function, registered in **canonical order** in `registry.py` with an
 explicit `dropped_fields` manifest. Look at `_compress_interfaces` (NX-OS
 splits interface state across two lines) for the pattern. If you find
@@ -87,7 +87,7 @@ program" — it's a code compressor.
 Out-of-tree/private compressors don't need a PR at all:
 
 ```python
-from terse import register
+from neterse import register
 
 @register(r"^show\s+my\s+thing", platforms=r"myvendor", dropped_fields=())
 def _compress_my_thing(raw: str) -> str:
@@ -98,7 +98,7 @@ def _compress_my_thing(raw: str) -> str:
 ## Development setup
 
 ```bash
-git clone https://github.com/pcDamasceno/terse && cd terse
+git clone https://github.com/pcDamasceno/neterse && cd neterse
 pip install -e ".[test]"
 pytest            # ~2000 tests, a couple of seconds, no network
 ```

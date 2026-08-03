@@ -1,9 +1,9 @@
-# Consumer handoff — everything terse needs from dbcli
+# Consumer handoff — everything neterse needs from dbcli
 
 *The plan lives in [DESIGN.md](DESIGN.md); Phases 2–4 are executed **here**.
-But the facts that drive them — the seam terse plugs into, how savings and
+But the facts that drive them — the seam neterse plugs into, how savings and
 opportunities are measured, what real agent runs revealed, and what the
-cutover actually costs — were learned in dbcli, terse's first consumer.
+cutover actually costs — were learned in dbcli, neterse's first consumer.
 This document carries them across so no future work in this repository
 needs dbcli access.*
 
@@ -23,26 +23,26 @@ site, script, and historical test uses. Phase 1 (spec engine, platform
 keying, lossiness manifests) landed **here only** and was never
 back-ported.
 
-| there (dbcli) | here (terse) | state |
+| there (dbcli) | here (neterse) | state |
 |---|---|---|
-| `dbcli/_incubator/showbrief/__init__.py` | `terse/__init__.py` | diverged: 0.1.0 vs 0.2.0 API surface (`register(platforms=, dropped_fields=)`, `iter_entries`) |
-| `dbcli/_incubator/showbrief/_compressors.py` (21 KB, 15 families) | `terse/_compressors.py` (13 KB, 6 families) + `specs.py` + `engine.py` + `registry.py` | diverged: 9 families became specs |
+| `dbcli/_incubator/showbrief/__init__.py` | `neterse/__init__.py` | diverged: 0.1.0 vs 0.2.0 API surface (`register(platforms=, dropped_fields=)`, `iter_entries`) |
+| `dbcli/_incubator/showbrief/_compressors.py` (21 KB, 15 families) | `neterse/_compressors.py` (13 KB, 6 families) + `specs.py` + `engine.py` + `registry.py` | diverged: 9 families became specs |
 | `tests/showbrief/corpus.py` | `tests/corpus.py` | **byte-identical** |
 | `tests/showbrief/legacy_snapshot.py` | `tests/legacy_snapshot.py` | identical but for the module docstring + logger name |
-| `tests/showbrief/test_showbrief.py`, `test_parity.py` | `tests/test_terse.py`, `test_parity.py` | ported |
+| `tests/showbrief/test_showbrief.py`, `test_parity.py` | `tests/test_neterse.py`, `test_parity.py` | ported |
 
 **The divergence is a maintenance fact, not a correctness risk.** 0.2.0's
 default path (no `platform=` argument) is byte-identical to the frozen
 baseline — that is exactly what `tests/test_parity.py` pins, and both
 repos freeze the *same* pre-extraction module as that baseline. dbcli can
-therefore adopt terse ≥ 0.2.0 without re-baselining anything, and there
+therefore adopt neterse ≥ 0.2.0 without re-baselining anything, and there
 is no reason to back-port Phase 1 into the vendored copy: it would be
 work whose only outcome is a second copy to keep in sync until Phase 4
 deletes it.
 
 ---
 
-## 2. The seam terse plugs into (drives Phase 2)
+## 2. The seam neterse plugs into (drives Phase 2)
 
 `dbcli/modules/agents/tools/network_tools._optimize_show_output` — every
 `execute_show_command` / `run_validation_command` result passes through
@@ -52,7 +52,7 @@ it on its way into LLM context:
 best, method = raw, None
 
 if settings.agents.token_optimization:                 # default on
-    toon = toon_optimize(command, raw)                 # ← terse.optimize()
+    toon = toon_optimize(command, raw)                 # ← neterse.optimize()
     if isinstance(toon, str) and len(toon) < len(best):
         best, method = toon, "toon"
 
@@ -73,17 +73,17 @@ return best
 What this tells us, and what it obliges:
 
 - **Invariant 3 holds in the field.** The consumer owns smallest-wins,
-  the metric, and the ledger. terse must keep returning candidates and
+  the metric, and the ledger. neterse must keep returning candidates and
   never selecting — Phase 2 does not get to change this shape.
 - **The parsed tier already has a live competitor to beat.** dbcli's
   `"parse"` candidate is `json.dumps` over Genie/ntc-templates rows — a
-  key-per-row encoding, which is precisely the shape terse's parsed tier
+  key-per-row encoding, which is precisely the shape neterse's parsed tier
   (project fields → header-once table) is meant to undercut.
   **Phase-2 acceptance test:** replay real parsed rows through both and
   compare characters; if the projection+encoder path does not beat
   `json.dumps(rows)` on multi-row output, the tier is not worth shipping.
   Note also that dbcli parses *offline* from raw text it already has —
-  no second device round-trip — so terse's `parsed=` argument is fed
+  no second device round-trip — so neterse's `parsed=` argument is fed
   cheaply, and both tiers are always available for the same call.
 - **Ordering gotcha with real consequences.** Compression runs *before*
   the downstream output cap (`agents.output_compaction_enabled` /
@@ -94,7 +94,7 @@ What this tells us, and what it obliges:
   truncation-flip, not just percentage saved.
 - **Only the LLM copy is compressed.** The device, the GAIT audit trail,
   and snapshot capture all see raw text from their own seams. Nothing in
-  terse may assume it is the only reader of the output.
+  neterse may assume it is the only reader of the output.
 - Settings are read at process start: a compressor change needs a
   backend **and** celery worker restart on a running deployment.
 - Fleet metric:
@@ -124,7 +124,7 @@ Agent History run detail:
 }
 ```
 
-Conventions worth inheriting verbatim in `terse audit` (§4), because
+Conventions worth inheriting verbatim in `neterse audit` (§4), because
 consumers already display them and a second definition would disagree
 with the first:
 
@@ -138,7 +138,7 @@ with the first:
 
 ---
 
-## 4. `terse audit` — port spec (Phase 3)
+## 4. `neterse audit` — port spec (Phase 3)
 
 The reference implementation is
 [`docs/reference/dbcli_analyze_run.py`](reference/dbcli_analyze_run.py)
@@ -149,18 +149,18 @@ the *report*, not the plumbing.
 the LangGraph checkpointer (`checkpoint_blobs.channel='messages'`,
 msgpack) because the run row's `ooda_phases[*].observation.raw_data`
 truncates each result to 500 chars — sizes read from there under-report.
-terse has no database: take a corpus of `(command, platform?, raw)`
+neterse has no database: take a corpus of `(command, platform?, raw)`
 samples from files/directories/JSONL/stdin. Stdlib only, like everything
 else here.
 
 **Output — keep these columns, they earned their keep:**
 
 ```
-  n     raw    terse  red%   entry                        command
+  n     raw    neterse  red%   entry                        command
   3   18244     6120   66%   ios/show_ip_route            show ip route
   1    9877     9877    0%   -                            show ip ospf database
 --------------------------------------------------------------------------------
-TOTAL device output: raw=…  terse=…  reduction=…%
+TOTAL device output: raw=…  neterse=…  reduction=…%
 covered-by-an-entry=…  uncovered=…
 
 OPPORTUNITIES (>=5% reduction not achieved), largest first:
@@ -184,7 +184,7 @@ as a lossiness review.
 **Also port the parity replay** —
 [`docs/reference/dbcli_replay_parity.py`](reference/dbcli_replay_parity.py):
 run a corpus through `tests/legacy_snapshot.py` and through current
-`terse`, exit 1 on any byte difference. This proves on real data what the
+`neterse`, exit 1 on any byte difference. This proves on real data what the
 fixture suite proves on fixtures; from Phase 1 on, diffs must be
 **confined to the family you intentionally changed**. One caveat carried
 over verbatim: checkpointed tool messages hold the representation that
@@ -225,19 +225,19 @@ expansion:
 No alembic migration, no deployment topology change — the package ships
 inside the image via pip, where it previously shipped inside `dbcli/`.
 
-1. Add `terse-net>=0.2.0` to `requirements.txt` (+ `requirements.lock`).
+1. Add `neterse>=0.2.0` to `requirements.txt` (+ `requirements.lock`).
 2. Flip the shim body in `dbcli/services/token_optimizer.py` to
-   `from terse import optimize, render, register, iter_compressors, Candidate`.
+   `from neterse import optimize, render, register, iter_compressors, Candidate`.
    **Keep the shim** — every call site, the analyzer scripts, and the
    historical tests import through it.
 3. Delete `dbcli/_incubator/showbrief/`.
-4. Tests: delete `tests/showbrief/` (terse's CI owns those suites now) but
+4. Tests: delete `tests/showbrief/` (neterse's CI owns those suites now) but
    keep `tests/services/test_token_optimizer.py` as the shim guard and
    `tests/agents/test_structured_show_output.py` as the seam guard — they
    are the consumer-side contract, and they are what would catch a bad
    pip upgrade.
 5. Update `.claude/skills/token-optimization/SKILL.md` paths (Step 3 edits
-   move to a terse PR) and the analyzer's import.
+   move to a neterse PR) and the analyzer's import.
 6. Restart backend + celery workers.
 
 Consumers keep the ledger, the Prometheus counter, the run-detail UI, and

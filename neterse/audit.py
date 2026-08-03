@@ -1,8 +1,8 @@
-"""``terse audit`` — coverage report over a corpus of real command outputs.
+"""``neterse audit`` — coverage report over a corpus of real command outputs.
 
 The port of dbcli's run analyzer (docs/reference/dbcli_analyze_run.py):
 the *report* without the plumbing. dbcli read a LangGraph checkpointer;
-terse has no database — feed it ``(command, platform?, raw)`` samples
+neterse has no database — feed it ``(command, platform?, raw)`` samples
 from JSONL files, fixture directories, or stdin, and it shows what the
 registry does with each family and, more importantly, what it misses:
 
@@ -159,10 +159,10 @@ def run_report(samples: List[Sample], show: int, out=None) -> float:
         fam.setdefault((command, platform), []).append(raw)
 
     w("=" * WIDTH + "\n")
-    w(f"terse {__version__} audit: {len(samples)} samples, "
+    w(f"neterse {__version__} audit: {len(samples)} samples, "
       f"{len(fam)} command families\n")
     w("=" * WIDTH + "\n")
-    w(f"{'n':>3} {'raw':>8} {'terse':>8} {'red%':>5}  "
+    w(f"{'n':>3} {'raw':>8} {'neterse':>8} {'red%':>5}  "
       f"{'entry':<38} command\n")
     w("-" * WIDTH + "\n")
 
@@ -207,7 +207,7 @@ def run_report(samples: List[Sample], show: int, out=None) -> float:
     w("-" * WIDTH + "\n")
     total_red = 100 * (1 - tot_new / tot_raw) if tot_raw else 0.0
     if tot_raw:
-        w(f"TOTAL device output: raw={tot_raw}  terse={tot_new}  "
+        w(f"TOTAL device output: raw={tot_raw}  neterse={tot_new}  "
           f"reduction={total_red:.0f}%  "
           f"(~{(tot_raw - tot_new) // CHARS_PER_TOKEN} tokens saved at "
           f"chars/{CHARS_PER_TOKEN})\n")
@@ -240,7 +240,7 @@ def run_report(samples: List[Sample], show: int, out=None) -> float:
 
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="terse",
+        prog="neterse",
         description="Minimum-token renderings of network CLI output "
                     "for LLM agents.",
     )

@@ -28,18 +28,18 @@ def main() -> int:
     enc = tiktoken.get_encoding(ENCODING)
     fams = measure(enc)
     tot_raw = sum(m["raw_tokens"] for m in fams.values())
-    tot_terse = sum(m["terse_tokens"] for m in fams.values())
+    tot_neterse = sum(m["neterse_tokens"] for m in fams.values())
     baseline = {
         "encoding": ENCODING,
         "tiktoken_version": tiktoken.__version__,
         "total_raw_tokens": tot_raw,
-        "total_terse_tokens": tot_terse,
+        "total_neterse_tokens": tot_neterse,
         "families": fams,
     }
     BASELINE_PATH.write_text(json.dumps(baseline, indent=2) + "\n")
     print(f"wrote {BASELINE_PATH}")
-    print(f"{len(fams)} families: {tot_raw} raw -> {tot_terse} terse tokens "
-          f"({100 * (1 - tot_terse / tot_raw):.1f}% saved, {ENCODING})")
+    print(f"{len(fams)} families: {tot_raw} raw -> {tot_neterse} neterse tokens "
+          f"({100 * (1 - tot_neterse / tot_raw):.1f}% saved, {ENCODING})")
     return 0
 
 

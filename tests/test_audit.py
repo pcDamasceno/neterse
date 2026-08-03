@@ -1,4 +1,4 @@
-"""The `terse audit` CLI: corpus loading, opportunity tags, exit codes.
+"""The `neterse audit` CLI: corpus loading, opportunity tags, exit codes.
 
 The fixture-directory ingestion path is covered in
 test_fixture_corpus.py (it doubles as the contribution-flow smoke test);
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from terse.audit import load_samples, main, run_report
+from neterse.audit import load_samples, main, run_report
 
 from .corpus import ACL, IP_ROUTE, STATUS
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replay a corpus through the frozen baseline AND current terse; report
+"""Replay a corpus through the frozen baseline AND current neterse; report
 any byte-level difference on the default path.
 
 The port of dbcli's replay_parity (docs/reference/dbcli_replay_parity.py)
@@ -36,8 +36,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from terse import optimize as current_optimize            # noqa: E402
-from terse.audit import load_samples                      # noqa: E402
+from neterse import optimize as current_optimize            # noqa: E402
+from neterse.audit import load_samples                      # noqa: E402
 from tests.legacy_snapshot import optimize as baseline_optimize  # noqa: E402
 
 
@@ -53,7 +53,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     samples = load_samples(args.paths, args.command)
-    print(f"replaying {len(samples)} samples through baseline and terse")
+    print(f"replaying {len(samples)} samples through baseline and neterse")
 
     diffs = 0
     per_cmd: dict = defaultdict(int)

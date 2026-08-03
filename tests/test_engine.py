@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from terse import iter_entries, optimize, register, render
-from terse import registry
-from terse.engine import STRATEGIES, build
-from terse.specs import SPECS
+from neterse import iter_entries, optimize, register, render
+from neterse import registry
+from neterse.engine import STRATEGIES, build
+from neterse.specs import SPECS
 
 from .corpus import ACL, BRIEF, COMMAND_FIXTURES, IP_INT_BRIEF, IP_ROUTE
 

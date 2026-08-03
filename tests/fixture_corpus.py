@@ -12,7 +12,7 @@ carries everything ``render()`` needs. The in-module corpus
 (``corpus.py``) remains the frozen LEGACY baseline set replayed through
 ``legacy_snapshot`` by the parity suite; file fixtures cover the
 POST-baseline families and are exercised behaviorally (shrink diagonal +
-fail-open matrix) through terse itself — see docs/DESIGN.md decision 15.
+fail-open matrix) through neterse itself — see docs/DESIGN.md decision 15.
 The audit CLI reads this same layout directly.
 """
 from __future__ import annotations

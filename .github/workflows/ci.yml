@@ -23,7 +23,7 @@ jobs:
         run: |
           python - <<'EOF'
           import importlib.metadata as md
-          deps = md.requires("terse-net") or []
+          deps = md.requires("neterse") or []
           runtime = [d for d in deps if "extra ==" not in d]
           assert not runtime, f"runtime deps crept in: {runtime}"
           print("zero runtime dependencies: OK")

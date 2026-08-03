@@ -1,9 +1,9 @@
 """Byte-parity with the frozen pre-extraction baseline.
 
-``legacy_snapshot.py`` is the dbcli module the terse package was extracted
+``legacy_snapshot.py`` is the dbcli module the neterse package was extracted
 from, frozen at extraction time. This suite replays the full corpus — every
 command x every body, including bodies deliberately paired with the wrong
-command, plus edge inputs — through the baseline and through ``terse``, and
+command, plus edge inputs — through the baseline and through ``neterse``, and
 asserts byte-identical results on the default path (no ``platform`` given).
 
 This is the standing acceptance rule for engine work: spec-engine
@@ -17,8 +17,8 @@ import re
 
 import pytest
 
-from terse import optimize as terse_optimize
-from terse import render
+from neterse import optimize as neterse_optimize
+from neterse import render
 
 from . import legacy_snapshot
 from .corpus import ALL_BODIES, ALL_COMMANDS, COMMAND_FIXTURES
@@ -28,7 +28,7 @@ from .corpus import ALL_BODIES, ALL_COMMANDS, COMMAND_FIXTURES
 # here without one. Exempted pairs still run both sides (no-crash,
 # shrink-coherence); only the byte-equality assertion is lifted, and the
 # family's NEW output is pinned by its own golden tests instead
-# (test_terse.py / test_cisco_real_captures.py).
+# (test_neterse.py / test_cisco_real_captures.py).
 INTENTIONAL_DIVERGENCES = {
     # decision 20: route-table faithfulness — the baseline silently drops
     # two-token protocol codes (O IA, O E2, ...) and garbles the
@@ -52,7 +52,7 @@ CROSS_MATRIX = [
 def test_optimize_byte_parity(command, body):
     if _diverged(command):
         pytest.skip("recorded divergence — pinned by its own golden tests")
-    assert terse_optimize(command, body) == legacy_snapshot.optimize(command, body)
+    assert neterse_optimize(command, body) == legacy_snapshot.optimize(command, body)
 
 
 @pytest.mark.parametrize("command,body", CROSS_MATRIX)
@@ -65,7 +65,7 @@ def test_render_is_coherent_with_optimize(command, body):
     expected = (
         min(candidates, key=lambda c: len(c.text)).text if candidates else body
     )
-    assert terse_optimize(command, body) == expected
+    assert neterse_optimize(command, body) == expected
 
 
 @pytest.mark.parametrize(
@@ -76,7 +76,7 @@ def test_corpus_diagonal_actually_compresses(label, command, body):
     """Guards corpus liveness: every fixture paired with its own command must
     genuinely shrink, and identically on both sides of the extraction
     (unless the family carries a recorded divergence)."""
-    out = terse_optimize(command, body)
+    out = neterse_optimize(command, body)
     assert out != body
     assert len(out) < len(body)
     if not _diverged(command):
@@ -85,11 +85,11 @@ def test_corpus_diagonal_actually_compresses(label, command, body):
 
 def test_every_legacy_family_still_covered():
     """Every command the baseline compresses must still find at least one
-    matching compressor in terse (count parity is asserted family-by-family
+    matching compressor in neterse (count parity is asserted family-by-family
     through the diagonal test; this guards outright loss of a family)."""
-    from terse import iter_compressors
+    from neterse import iter_compressors
 
     for label, command, _body in COMMAND_FIXTURES:
         assert any(p.search(command) for p, _ in iter_compressors()), (
-            f"no terse compressor matches {command!r} ({label})"
+            f"no neterse compressor matches {command!r} ({label})"
         )

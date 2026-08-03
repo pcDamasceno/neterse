@@ -3,12 +3,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-# Distribution name is `terse-net` because `terse` on PyPI is squatted by an
-# abandoned 2019 package (PEP 541 name-transfer is a later option). The
-# IMPORT name is plain `terse`.
-name = "terse-net"
-version = "0.4.0"                     # keep in lockstep with terse.__version__
-description = "terse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
+# `neterse` = "network terse": the natural name `terse` is squatted on PyPI
+# by an abandoned 2019 package (decision 23). Distribution, import, and CLI
+# share the one name.
+name = "neterse"
+version = "0.4.0"                     # keep in lockstep with neterse.__version__
+description = "neterse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "Apache-2.0" }
@@ -35,21 +35,21 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/pcDamasceno/terse"
-Issues = "https://github.com/pcDamasceno/terse/issues"
+Homepage = "https://github.com/pcDamasceno/neterse"
+Issues = "https://github.com/pcDamasceno/neterse/issues"
 
 [project.scripts]
-terse = "terse.audit:main"
+neterse = "neterse.audit:main"
 
 [project.optional-dependencies]
 test = ["pytest"]
 # Later phases: textfsm = ["ntc-templates"], tokens = ["tiktoken"], …
 
 [tool.setuptools]
-packages = ["terse"]
+packages = ["neterse"]
 
 [tool.setuptools.package-data]
-terse = ["py.typed"]
+neterse = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

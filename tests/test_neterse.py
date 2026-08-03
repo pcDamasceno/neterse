@@ -1,4 +1,4 @@
-"""Behavioral suite for the ``terse`` package.
+"""Behavioral suite for the ``neterse`` package.
 
 Pins the public API surface (``render() -> [Candidate]``, ``optimize()``,
 ``register()``, ``iter_compressors()``) and the behavior of every
@@ -13,7 +13,7 @@ import re
 
 import pytest
 
-from terse import (
+from neterse import (
     Candidate,
     __version__,
     iter_compressors,
@@ -21,7 +21,7 @@ from terse import (
     register,
     render,
 )
-from terse import registry
+from neterse import registry
 
 from .corpus import (
     BRIEF,

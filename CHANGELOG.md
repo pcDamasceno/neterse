@@ -2,6 +2,12 @@
 
 ## 0.4.0 — Phase 3: community launch
 
+**Renamed to `neterse`** ("network terse") before first publish —
+distribution, import, and CLI all share the name, replacing the working
+names `terse` (import) / `terse-net` (distribution), since PyPI `terse`
+is squatted by an abandoned 2019 package (decision 23). No PEP 541
+process needed; nothing was ever published under the old names.
+
 ### Live-lab verification (post-release-candidate)
 
 Verified against real devices (containerlab `cisco_iol` ×4, IOS 17.12.1,
@@ -50,8 +56,8 @@ the frozen baseline (parity cross-matrix). New vendor families are
 post-baseline: covered behaviorally, never allowed to change a legacy
 result (decision 15).
 
-- **`terse audit`** (`terse/audit.py`, console script `terse` /
-  `python -m terse`): the coverage tool, ported from dbcli's run
+- **`neterse audit`** (`neterse/audit.py`, console script `neterse` /
+  `python -m neterse`): the coverage tool, ported from dbcli's run
   analyzer. Feed it `(command, platform?, raw)` samples — JSONL files,
   fixture directories, raw captures with `--command`, or stdin — and it
   reports per-family reduction, totals (chars/4 token estimate),
@@ -61,14 +67,14 @@ result (decision 15).
   `dropped_fields` so an audit doubles as a lossiness review. `--show N`
   dumps the heads of the largest gaps; `--fail-under PCT` gates CI.
 - **Parity replay** (`scripts/replay_parity.py`): replay any corpus
-  through the frozen baseline and current terse, unified-diff and exit 1
+  through the frozen baseline and current neterse, unified-diff and exit 1
   on byte differences. Repo-side by design — the baseline isn't shipped.
 - **Fixture-per-file contribution layout**:
   `tests/fixtures/<platform>/<family>/{commands.txt,raw.txt}` — the
   audit CLI reads the same layout. Every fixture dropped there is
   auto-covered by the suite: diagonal shrink (with and without
   platform), winner-is-own-spec, wrong-platform skip, and a fail-open
-  cross-matrix through terse itself.
+  cross-matrix through neterse itself.
 - **Multi-vendor expansion** (9 new spec families, registered strictly
   after the legacy sequence): Arista EOS (interfaces status, ip arp,
   vlan), Juniper Junos (interfaces terse, ospf neighbor), Aruba AOS-CX
@@ -84,10 +90,9 @@ result (decision 15).
   floor. Skips locally without tiktoken; runtime stays chars/4
   (decision 8). Regenerate with `scripts/update_token_baseline.py` —
   a recorded decision, like byte-parity changes.
-- **Release machinery**: `release.yml` publishes `terse-net` to PyPI via
+- **Release machinery**: `release.yml` publishes `neterse` to PyPI via
   Trusted Publishing on a `v*` tag (tag/version lockstep check + wheel
-  smoke test); human steps in `docs/RELEASING.md`, including the PEP 541
-  plan for the `terse` name.
+  smoke test); human steps in `docs/RELEASING.md`.
 
 ## 0.3.0 — Phase 2: parsed tier, profiles, kv_extract
 
@@ -95,7 +100,7 @@ Outputs on the default path (no `parsed`, no `profile`, no `platform`)
 remain byte-identical to 0.1.0 — pinned by the parity suite against the
 frozen baseline. `optimize()` is untouched.
 
-- **Parsed tier** (`terse/parsed.py`): `render(parsed=...)` is now ACTIVE.
+- **Parsed tier** (`neterse/parsed.py`): `render(parsed=...)` is now ACTIVE.
   Pass rows another parser already produced (Genie / ntc-templates / TTP /
   NAPALM / gNMI — a list of dicts, or a single dict for one row) and the
   tier re-encodes them header-once, independent of any registry match.
@@ -124,7 +129,7 @@ frozen baseline. `optimize()` is untouched.
   requested profile render their complete default — an unknown profile
   never loses data. `"full"` is an alias of `"default"` (the complete
   path), so the marker's re-query hint is directly actionable.
-- **`kv_extract` strategy** (`terse/engine.py`): first-match field scans
+- **`kv_extract` strategy** (`neterse/engine.py`): first-match field scans
   are now expressible as specs. `show version` moved from a hand-written
   function to `spec:cisco/show_version` — byte-identical output (the
   cross-matrix pins it); `Candidate.source` for that family changed from
@@ -136,16 +141,16 @@ frozen baseline. `optimize()` is untouched.
 Outputs are byte-identical to 0.1.0 on the default path (no `platform`
 argument) — pinned by the parity suite against the frozen baseline.
 
-- Spec engine (`terse/engine.py`): generic strategies compile declarative
+- Spec engine (`neterse/engine.py`): generic strategies compile declarative
   dict specs into compressors. Shipped strategies: `line_regex_table`,
   `fixed_width_table`.
 - 9 of the 15 families converted from hand-written functions to specs
-  (`terse/specs.py`): ip route, ip interface brief, bgp summary, ospf
+  (`neterse/specs.py`): ip route, ip interface brief, bgp summary, ospf
   neighbors, cdp/lldp, vlan brief, interface status, interface brief
   (NX-OS), eigrp neighbors. The 6 genuinely stateful families stay as
   code (`_compressors.py`): interface detail, version, running-config,
   access-lists, counters errors, port-channel summary.
-- Registry (`terse/registry.py`): one canonical-order `Entry` list
+- Registry (`neterse/registry.py`): one canonical-order `Entry` list
   carrying pattern, function, platform scope, and lossiness manifest;
   `register()` gains optional `platforms=` and `dropped_fields=`.
 - `render(platform=...)` is now ACTIVE: entries with a non-matching

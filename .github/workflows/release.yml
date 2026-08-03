@@ -1,6 +1,6 @@
 name: release
 
-# Publishes terse-net to PyPI via Trusted Publishing when a version tag is
+# Publishes neterse to PyPI via Trusted Publishing when a version tag is
 # pushed. One-time setup and the full checklist: docs/RELEASING.md.
 
 on:
@@ -18,8 +18,8 @@ jobs:
       - name: Tag must match the package version
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          VERSION=$(python -c "import re,pathlib;print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('terse/__init__.py').read_text()).group(1))")
-          test "$TAG" = "$VERSION" || { echo "tag v$TAG != terse.__version__ $VERSION"; exit 1; }
+          VERSION=$(python -c "import re,pathlib;print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('neterse/__init__.py').read_text()).group(1))")
+          test "$TAG" = "$VERSION" || { echo "tag v$TAG != neterse.__version__ $VERSION"; exit 1; }
       - name: Build sdist + wheel
         run: pip install build && python -m build
       - name: Smoke-test the wheel (import, CLI, zero-dep guard)
@@ -27,13 +27,13 @@ jobs:
           pip install dist/*.whl
           python - <<'EOF'
           import importlib.metadata as md
-          import terse
-          deps = md.requires("terse-net") or []
+          import neterse
+          deps = md.requires("neterse") or []
           runtime = [d for d in deps if "extra ==" not in d]
           assert not runtime, f"runtime deps crept in: {runtime}"
-          print("terse", terse.__version__, "- zero runtime dependencies: OK")
+          print("neterse", neterse.__version__, "- zero runtime dependencies: OK")
           EOF
-          terse --version
+          neterse --version
       - uses: actions/upload-artifact@v4
         with:
           name: dist

@@ -1,14 +1,14 @@
-# Releasing terse-net
+# Releasing neterse
 
 The release pipeline is automated (`.github/workflows/release.yml`); the
-steps below are the human parts. The distribution is **`terse-net`**, the
-import is **`terse`** (decision 1).
+steps below are the human parts. Distribution, import, and CLI are all
+**`neterse`** (decision 23).
 
 ## One-time setup (before the first release)
 
 1. **PyPI Trusted Publisher.** On pypi.org, create the *pending publisher*
-   for the project name `terse-net`:
-   - Owner: `pcDamasceno` · Repository: `terse`
+   for the project name `neterse`:
+   - Owner: `pcDamasceno` · Repository: `neterse`
    - Workflow: `release.yml` · Environment: `pypi`
 2. **GitHub environment.** Create the `pypi` environment in the repo
    settings (Settings → Environments); optionally require reviewers on it
@@ -20,7 +20,7 @@ import is **`terse`** (decision 1).
 
 1. Bump the version in **both** places (they must stay in lockstep;
    the workflow refuses a mismatched tag):
-   - `terse/__init__.py` → `__version__`
+   - `neterse/__init__.py` → `__version__`
    - `pyproject.toml` → `version`
 2. Update `CHANGELOG.md`; record any baseline decisions in
    `docs/DESIGN.md` (byte-parity or token-baseline changes).
@@ -32,15 +32,16 @@ import is **`terse`** (decision 1).
    ```
 
    The workflow builds sdist+wheel, verifies tag == version, smoke-tests
-   the wheel (import, `terse --version`, zero-dep guard), and publishes.
-5. Verify: `pip install terse-net==<version>` in a clean venv;
-   `python -c "import terse; print(terse.__version__)"`.
+   the wheel (import, `neterse --version`, zero-dep guard), and publishes.
+5. Verify: `pip install neterse==<version>` in a clean venv;
+   `python -c "import neterse; print(neterse.__version__)"`.
 
-## The `terse` name (PEP 541)
+## The name
 
-PyPI `terse` is occupied by an unrelated package abandoned in 2019.
-Reclaiming it is a [PEP 541](https://peps.python.org/pep-0541/) transfer
-request: open an issue on [pypi/support](https://github.com/pypi/support)
-with the `PEP 541` template *after* `terse-net` is published (the request
-needs a live project to transfer to). Until/unless granted, the
-install name stays `terse-net`; nothing else changes (decision 1).
+The natural name `terse` is occupied on PyPI by an unrelated package
+abandoned in 2019. The project's working names were `terse` (import) /
+`terse-net` (distribution) with a PEP 541 transfer as a long-shot plan;
+before the first publish it was renamed **`neterse`** ("network terse",
+free on PyPI — verified 2026-08-03) so distribution, import, and CLI
+share one name and no PEP 541 process is needed (decision 23 supersedes
+decision 1). Nothing was ever published under the old names.

@@ -1,11 +1,11 @@
-# terse
+# neterse
 
 *Minimum-token renderings of network CLI output for LLM agents — the
 `| brief` the vendor never shipped.*
 
 LLM-driven network agents burn most of their context window on the noise in
 `show`-command output: separator dashes, static legends, wrapped headers,
-all-zero counter tables, and keys repeated on every row. **terse** rewrites
+all-zero counter tables, and keys repeated on every row. **neterse** rewrites
 that output into the smallest representation that preserves the semantics,
 before it enters model context — so agents spend tokens on reasoning, not
 formatting. Savings of 40–60% are typical on tabular output; on huge
@@ -13,7 +13,7 @@ mostly-zero tables, compression is the difference between a truncated tool
 result and a complete one.
 
 ```python
-from terse import render, optimize
+from neterse import render, optimize
 
 # Full API — every candidate that shrinks the output; policy is yours:
 candidates = render(raw, command="show interface status", platform="cisco_nxos")
@@ -37,7 +37,7 @@ Port      Name               Status   Vlan    Duplex  Speed  Type
 Eth1/11   RSRFF206 Twe1/0/3  connected routed  full    10G    10Gbase-SR
 Eth1/45   RFRA3213-Eth1/48   connected routed  full    10G    10Gbase-LR
                     │
-                    ▼  terse
+                    ▼  neterse
 port,name,status,vlan,duplex,speed,type
 Eth1/11,RSRFF206 Twe1/0/3,connected,routed,full,10G,10Gbase-SR
 Eth1/45,RFRA3213-Eth1/48,connected,routed,full,10G,10Gbase-LR
@@ -46,12 +46,12 @@ Eth1/45,RFRA3213-Eth1/48,connected,routed,full,10G,10Gbase-LR
 ## Install
 
 ```bash
-pip install terse-net        # import name: terse
+pip install neterse        # import name: neterse
 ```
 
-> The distribution is `terse-net` because the PyPI name `terse` is occupied
-> by an unrelated package abandoned in 2019 (a PEP 541 transfer request may
-> reclaim it eventually). The import is plain `import terse`.
+> Named **neterse** ("network terse") because the natural name `terse` is
+> occupied on PyPI by an unrelated package abandoned in 2019. Distribution,
+> import, and CLI all share the one name.
 
 ## Design in one paragraph
 
@@ -91,11 +91,11 @@ and caching belong to the consumer. Full architecture:
 
 ## Provenance & prior art
 
-terse was extracted from [dbcli]'s TOON optimizer ("Token-Optimized Output
+neterse was extracted from [dbcli]'s TOON optimizer ("Token-Optimized Output
 for Networks", inspired by [NetClaw]'s TOON serialization work) and turned
 into a standalone, community-extensible library. It complements — not
 competes with — the parsing ecosystems: [ntc-templates], [Genie/pyATS] and
-[TTP] turn CLI text into structure; terse makes structure (and unparseable
+[TTP] turn CLI text into structure; neterse makes structure (and unparseable
 raw text) *cheap to show to a model*. The tabular encoding aligns with
 [TOON — Token-Oriented Object Notation]; emitting spec-compliant TOON for
 uniform tables is on the roadmap.
@@ -114,7 +114,7 @@ uniform tables is on the roadmap.
 | 0 | API frozen (`render`/`Candidate`/`optimize`/`register`); 15 compressor families extracted verbatim; byte-parity baseline | ✅ |
 | 1 | Spec engine (generic strategies over declarative specs), platform-keyed dispatch, declared-lossiness manifests | ✅ |
 | 2 | Parsed tier: field projection + compact encoders (CSV/TOON) over pre-parsed rows; opt-in profiles with inline omission markers; `kv_extract` strategy | ✅ |
-| 3 | `terse audit` coverage tool, fixture-per-file contribution flow, CI token-savings regression (pinned tokenizer), multi-vendor expansion (Arista EOS, Junos, Aruba AOS-CX, MikroTik), PyPI release machinery | ✅ |
+| 3 | `neterse audit` coverage tool, fixture-per-file contribution flow, CI token-savings regression (pinned tokenizer), multi-vendor expansion (Arista EOS, Junos, Aruba AOS-CX, MikroTik), PyPI release machinery | ✅ |
 | 4 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
 
 ## Coverage
@@ -130,8 +130,8 @@ tier covers anything your parser already handles, on any platform.
 Measure coverage over your own agent's traffic with the bundled CLI:
 
 ```bash
-terse audit run.jsonl --show 3      # {"command":..., "platform":..., "raw":...} per line
-terse audit tests/fixtures          # or point it at a fixture tree
+neterse audit run.jsonl --show 3      # {"command":..., "platform":..., "raw":...} per line
+neterse audit tests/fixtures          # or point it at a fixture tree
 ```
 
 It reports per-family reduction, what reached the model uncompressed

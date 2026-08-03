@@ -8,8 +8,8 @@ is that transform — it knows nothing about commands or vendors, so one
 encoder covers every command those parsers handle.
 
 ``encode(parsed, profile)`` accepts a list of dicts (or a single dict —
-one row) and returns encoder outputs as plain tuples; ``terse.render``
-wraps them into :class:`~terse.Candidate` objects and applies the usual
+one row) and returns encoder outputs as plain tuples; ``neterse.render``
+wraps them into :class:`~neterse.Candidate` objects and applies the usual
 shrink gate against the raw output. Two encodings are emitted and BOTH
 are returned — candidates, not policy:
 

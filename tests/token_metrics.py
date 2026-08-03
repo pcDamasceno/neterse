@@ -1,6 +1,6 @@
 """Shared helpers for the real-tokenizer savings regression (Phase 3).
 
-Runtime terse never touches a tokenizer — ``Candidate.est_tokens()`` is
+Runtime neterse never touches a tokenizer — ``Candidate.est_tokens()`` is
 chars/4 by decision 8. CI, however, measures the thing we actually claim
 to save: tokens under a real, PINNED encoding. These helpers are shared
 by the pytest gate (``test_token_savings.py``) and the baseline
@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 from typing import Dict, Tuple
 
-from terse import optimize
+from neterse import optimize
 
 from .corpus import COMMAND_FIXTURES
 from .fixture_corpus import FILE_FIXTURES
@@ -43,7 +43,7 @@ def measure(enc) -> Dict[str, Dict[str, int]]:
     for label, (command, body) in sorted(families().items()):
         out[label] = {
             "raw_tokens": len(enc.encode(body)),
-            "terse_tokens": len(enc.encode(optimize(command, body))),
+            "neterse_tokens": len(enc.encode(optimize(command, body))),
         }
     return out
 

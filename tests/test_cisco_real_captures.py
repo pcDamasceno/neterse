@@ -11,7 +11,7 @@ import re
 
 import pytest
 
-from terse import optimize, render
+from neterse import optimize, render
 
 from .fixture_corpus import FILE_FIXTURES
 
