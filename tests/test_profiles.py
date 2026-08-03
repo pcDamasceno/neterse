@@ -143,6 +143,35 @@ def test_updown_projects_parsed_rows_by_field_name():
     assert toon.text.splitlines()[-1] == omission_marker(("ip_address",))
 
 
+def test_updown_keeps_line_protocol_on_ntc_show_interfaces_schema():
+    """Live-lab find (2026-08-03, r1 + ntc-templates): `show interfaces`
+    parses to ``link_status`` + ``protocol_status``, and the status
+    patterns missed the second spelling — an interface-liveness profile
+    that withholds the line-protocol column defeats its own purpose
+    (declared, so not silent loss, but semantically wrong). Field names
+    below are the real ntc-templates cisco_ios schema from r1."""
+    rows = [
+        {"interface": "Ethernet0/1", "link_status": "up",
+         "protocol_status": "up", "hardware_type": "AmdP2",
+         "ip_address": "12.12.12.1", "mtu": "1500"},
+        {"interface": "Ethernet0/3", "link_status": "administratively down",
+         "protocol_status": "down", "hardware_type": "AmdP2",
+         "ip_address": "", "mtu": "1500"},
+    ]
+    cands = [
+        c for c in render(
+            "x" * 600, command="show interfaces", parsed=rows, profile="updown"
+        )
+        if c.source == "parsed:csv"
+    ]
+    (csv,) = cands
+    lines = csv.text.splitlines()
+    assert lines[0] == "interface,link_status,protocol_status"
+    assert lines[2] == "Ethernet0/3,administratively down,down"
+    assert "protocol_status" not in csv.dropped_fields
+    assert set(csv.dropped_fields) == {"hardware_type", "ip_address", "mtu"}
+
+
 def test_parsed_profile_falls_back_to_full_when_schema_is_unknown():
     """Field names the profile's patterns don't discriminate → complete
     encoding, no marker, no silent loss."""

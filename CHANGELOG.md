@@ -31,6 +31,19 @@ the baseline itself wrong twice. Both fixes ship in 0.4.0:
   ospf database`, `show ip protocols`, `show interfaces description`,
   `show ip ospf interface brief`, and IOL-spaced `show cdp neighbors`
   (`Eth 0/0`) — all fail open, none lose data.
+- **Parsed-tier verification** (r1 + netmiko `use_textfsm=True`, i.e.
+  ntc-templates/TextFSM — the tier's real consumer stack): 12 live
+  families verified cell-for-cell faithful (CSV independently decoded
+  and compared to the parser's rows), TOON row counts exact, shrink
+  gate honest (`show clock` correctly yields no candidate), and a
+  string-typed `parsed` (netmiko's no-template fallback) declines
+  cleanly. The parsed tier covers every raw-tier gap family above
+  (ospf database 65%, cdp neighbors detail 70%, interfaces
+  description 69% reduction). One fix (decision 22): the `updown`
+  status patterns missed ntc's `protocol_status` spelling, so the
+  liveness profile dropped the line-protocol column on
+  `show interfaces`; `protocol_status`/`oper_status`/`admin_status`
+  now match. Additive — profiles only; default path untouched.
 
 Default-path outputs for all legacy families remain byte-identical to
 the frozen baseline (parity cross-matrix). New vendor families are

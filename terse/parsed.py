@@ -58,7 +58,8 @@ PROFILES = {
         re.compile(r"^(?:port|interface|intf|intf_name|name)$", re.IGNORECASE),
         re.compile(
             r"^(?:status|state|protocol|proto|link|link_status|line_protocol|"
-            r"oper_state|admin_state|reason)$",
+            r"protocol_status|oper_state|oper_status|admin_state|admin_status|"
+            r"reason)$",
             re.IGNORECASE,
         ),
     ),
