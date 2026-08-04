@@ -16,7 +16,11 @@ Strategies:
     emit; omit for all groups), ``strip_columns`` (group indexes whose
     value is ``.strip()``-ed), ``context_prefixes`` (lines starting with
     any of these are captured as a context line prepended to the table —
-    e.g. the EIGRP process/VRF line).
+    e.g. the EIGRP process/VRF line), ``unindented_rows_only`` (bool:
+    skip indented lines BEFORE stripping — for tables whose data rows
+    start at column 0, so wrapped continuation lines can never
+    false-match; e.g. IOS cdp wraps a long device ID onto its own line
+    and indents the remaining columns).
 
 ``fixed_width_table``
     Offset-sliced fixed-width table → CSV, driven by the header keywords
@@ -24,7 +28,11 @@ Strategies:
     ``header``, and optionally ``row_match`` — a regex a data row's first
     column must match (default: the Cisco-family interface-name pattern;
     vendors with other port-name shapes, e.g. Arista ``Et1`` or Aruba
-    ``1/1/1``, declare their own).
+    ``1/1/1``, declare their own) — and ``first_col_wraps`` (bool): the
+    first column's value may overflow its width and wrap onto its own
+    line (IOS ``show cdp neighbors`` device IDs); rows are re-joined via
+    ``_compressors._wrapped_first_col_rows``, with ``row_match``
+    defaulting to a single-token pattern instead of interface names.
 
 ``kv_extract`` (Phase 2)
     First-match field scan → one ``key=value | key=value`` line. Spec
@@ -108,11 +116,14 @@ def _line_regex_table(
     columns = spec.get("columns")
     strip_columns = set(spec.get("strip_columns", ()))
     context_prefixes = tuple(spec.get("context_prefixes", ()))
+    unindented_only = bool(spec.get("unindented_rows_only"))
 
     def _compress(raw: str) -> str:
         context = None
         rows = [header]
         for line in raw.splitlines():
+            if unindented_only and line[:1] in (" ", "\t"):
+                continue
             stripped = line.strip()
             if context_prefixes and stripped.startswith(context_prefixes):
                 context = stripped
@@ -150,7 +161,7 @@ def _fixed_width_table(
     # Imported here (not at module top) to keep the leaf/helper dependency
     # direction obvious: engine consumes _compressors' helpers, never the
     # other way around.
-    from ._compressors import _csv_row, _fixed_width_rows
+    from ._compressors import _csv_row, _fixed_width_rows, _wrapped_first_col_rows
 
     keywords = list(spec["keywords"])
     header = spec["header"] if projection is None else projection[1]
@@ -158,9 +169,15 @@ def _fixed_width_table(
         re.compile(spec["row_match"], re.IGNORECASE)
         if spec.get("row_match") else None
     )
+    first_col_wraps = bool(spec.get("first_col_wraps"))
 
     def _compress(raw: str) -> str:
-        rows = _fixed_width_rows(raw, keywords, name_re)
+        if first_col_wraps:
+            rows = _wrapped_first_col_rows(
+                raw, keywords, name_re or re.compile(r"^\S+$")
+            )
+        else:
+            rows = _fixed_width_rows(raw, keywords, name_re)
         if not rows:
             return raw
         out = [header]

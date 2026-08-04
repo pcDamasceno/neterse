@@ -27,7 +27,7 @@ def test_every_spec_builds_and_declares():
     """Specs must compile, use known strategies, and carry a manifest —
     a spec without ``dropped_fields`` would silently regress to
     'undeclared', losing exactly the vocabulary Phase 1 exists to add."""
-    assert len(SPECS) == 19
+    assert len(SPECS) == 20
     ids = [s["id"] for s in SPECS]
     assert len(ids) == len(set(ids)), "duplicate spec ids"
     for spec in SPECS:
@@ -59,10 +59,11 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
     # the legacy sequence stays contiguous and ordered; Phase-3 vendor
     # entries append strictly AFTER it so ties keep resolving to baseline
     assert names[14] == "_compress_portchannel_summary"
+    legacy = set(names[:15])
     assert all(
-        "/" in n and not n.startswith("spec:cisco") for n in names[15:]
+        "/" in n and n not in legacy for n in names[15:]
     ), "post-baseline entries must follow the legacy sequence"
-    assert sum(1 for n in names if n.startswith("spec:")) == 19
+    assert sum(1 for n in names if n.startswith("spec:")) == 20
     assert sum(1 for n in names if not n.startswith("spec:")) == 5
 
 

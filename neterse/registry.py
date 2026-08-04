@@ -147,6 +147,9 @@ REGISTRY: List[Entry] = [
     _spec_entry(_BY_ID["aruba_aoscx/show_vlan"]),
     _spec_entry(_BY_ID["mikrotik_routeros/ip_address_print"]),
     _spec_entry(_BY_ID["mikrotik_routeros/interface_print"]),
+    # -- Live-lab gap fixes (bgp_fundamentals verification, decision 25+):
+    #    still strictly appended, same tie-break reasoning as above.
+    _spec_entry(_BY_ID["cisco_ios/show_cdp_neighbors"]),
 ]
 
 

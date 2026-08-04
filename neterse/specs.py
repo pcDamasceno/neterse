@@ -168,6 +168,12 @@ SPECS: list = [
         "command": r"show\s+(?:cdp|lldp)\s+neigh",
         "platforms": r"ios|xe|xr|nx",
         "strategy": "line_regex_table",
+        # Data rows start at column 0 on every platform this entry knows;
+        # without this guard the stripped IOS *continuation* line of a
+        # wrapped device ID ("<spaces>Eth 0/0  165  R ...") false-matches
+        # the row regex and yields a corrupt row that can WIN smallest-
+        # wins over the faithful fixed-width entry (decision 25).
+        "unindented_rows_only": True,
         "row": (
             r"^(\S+)\s+"       # device ID
             r"(\S+)\s+"        # local intf
@@ -386,5 +392,28 @@ SPECS: list = [
         ),
         "header": "num,flags,name,type,mtu,l2mtu",
         "dropped_fields": (),
+    },
+    {
+        # IOS/IOS-XE `show cdp neighbors` is a fixed-width table whose
+        # values carry spaces (`Eth 0/0`, `Linux Uni`) — the legacy
+        # line-regex entry (cisco/show_cdp_lldp_neighbors, NX-OS-shaped
+        # single-token rows) fails open on it, which is exactly how the
+        # bgp_fundamentals lab surfaced this gap (decision 25). Keyed on
+        # the IOS header spelling `Holdtme` (NX-OS prints `Hldtme`), so
+        # the two entries never compete on the same body. Long device IDs
+        # wrap onto their own line; `first_col_wraps` re-joins them.
+        "id": "cisco_ios/show_cdp_neighbors",
+        "command": r"show\s+cdp\s+neigh(?:bors?)?\s*$",
+        "platforms": r"ios|xe",
+        "strategy": "fixed_width_table",
+        "keywords": ["Device ID", "Local Intrfce", "Holdtme",
+                     "Capability", "Platform", "Port ID"],
+        "row_match": r"^\S+$",
+        "first_col_wraps": True,
+        "header": "device,local_intf,holdtime,capability,platform,remote_port",
+        "dropped_fields": ("entry_count",),
+        "doc": "show cdp neighbors (IOS fixed-width) -> CSV; capability "
+               "legend and the derivable 'Total cdp entries' line are "
+               "dropped, holdtime is kept (the legacy entry drops it).",
     },
 ]

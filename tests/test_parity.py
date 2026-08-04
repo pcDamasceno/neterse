@@ -40,6 +40,15 @@ INTENTIONAL_DIVERGENCES = {
     "decision-24-bgp-summary": re.compile(
         r"show\s+(?:ip\s+)?bgp\s+summary", re.IGNORECASE
     ),
+    # decision 25: cdp false-match containment — the baseline's loose row
+    # regex matched INDENTED lines after stripping (NX-OS interface-detail
+    # counter lines in the cross-matrix; IOS wrapped-device-ID continuation
+    # lines in the field) and emitted corrupt rows. Data rows start at
+    # column 0 on every platform this entry knows, so it now skips
+    # indented lines; on-format output is unchanged and pinned by goldens.
+    "decision-25-cdp-lldp-neighbors": re.compile(
+        r"show\s+(?:cdp|lldp)\s+neigh", re.IGNORECASE
+    ),
 }
 
 

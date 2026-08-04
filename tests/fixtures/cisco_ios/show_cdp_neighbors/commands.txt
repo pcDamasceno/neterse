@@ -1,0 +1,3 @@
+# Spellings agents actually typed for this family (run b9a60760 + bgp lab)
+show cdp neighbors
+show cdp neigh
