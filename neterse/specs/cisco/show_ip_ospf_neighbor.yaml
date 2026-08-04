@@ -1,0 +1,9 @@
+# show ip ospf neighbor (IOS family) -> lossless CSV.
+command: 'show\s+ip\s+ospf\s+neigh'
+platforms: 'ios|xe|xr|nx'
+strategy: line_regex_table
+#      1: neighbor ID   2: priority   3: state   4: dead time
+#      5: address       6: interface
+row: '^(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)'
+header: neighbor_id,priority,state,dead_time,address,interface
+dropped_fields: []

@@ -1,0 +1,10 @@
+# `show ospf neighbor` (Junos) -> lossless CSV — the Cisco family
+# requires `show ip ospf` (cisco/show_ip_ospf_neighbor.yaml).
+command: '^show\s+ospf\s+neigh(?:bor)?\s*$'
+platforms: 'junos|juniper'
+strategy: line_regex_table
+#      1: address   2: interface   3: state   4: neighbor ID
+#      5: priority  6: dead
+row: '^(\d+\.\d+\.\d+\.\d+)\s+(\S+)\s+(\S+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+)\s+(\d+)$'
+header: address,interface,state,neighbor_id,priority,dead
+dropped_fields: []

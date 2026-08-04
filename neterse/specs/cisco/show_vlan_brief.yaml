@@ -1,0 +1,10 @@
+# show vlan brief (IOS/NX-OS) -> CSV. Arista's bare `show vlan` lives in
+# arista_eos/show_vlan.yaml.
+command: 'show\s+vlan\s+brief'
+platforms: 'ios|xe|nx'
+strategy: line_regex_table
+#      1: VLAN ID   2: name   3: status   4: ports
+row: '^(\d+)\s+(\S+)\s+(active|act/unsup|sus)\s*(.*)?$'
+header: vlan,name,status,ports
+strip_columns: [4]
+dropped_fields: []

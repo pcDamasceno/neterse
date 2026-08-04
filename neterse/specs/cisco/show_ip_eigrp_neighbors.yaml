@@ -1,0 +1,9 @@
+# show ip eigrp neighbors (IOS/NX-OS) -> lossless CSV; the process/VRF
+# context line is preserved above the table.
+command: 'show\s+ip\s+eigrp\s+neigh'
+platforms: 'ios|xe|nx'
+strategy: line_regex_table
+row: '^(\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)\s+(\d+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)'
+header: h,address,interface,hold,uptime,srtt,rto,q,seq
+context_prefixes: ['IP-EIGRP neighbors', 'EIGRP-IPv4']
+dropped_fields: []

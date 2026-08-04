@@ -1,0 +1,15 @@
+# show processes cpu sorted (IOS/IOS-XE) -> lossless CSV; retains the
+# aggregate utilization line and every process row.
+command: '^show\s+processes\s+cpu\s+sorted(?:\s+\S+)?\s*$'
+platforms: 'ios|xe'
+strategy: line_regex_table
+#      1: PID   2: runtime (ms)   3: invocations   4: usecs per invocation
+#      5: 5 seconds   6: 1 minute   7: 5 minutes   8: TTY   9: process name
+row: '^(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+%)\s+([\d.]+%)\s+([\d.]+%)\s+(\d+)\s+(.+)$'
+header: pid,runtime_ms,invoked,usecs,cpu_5sec,cpu_1min,cpu_5min,tty,process
+strip_columns: [9]
+context_prefixes: ['CPU utilization for five seconds:']
+dropped_fields: []
+doc: >-
+  show processes cpu sorted (IOS/IOS-XE) -> lossless CSV; retains the
+  aggregate utilization line and every process row.

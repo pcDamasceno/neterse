@@ -1,0 +1,27 @@
+# show ip route (IOS/IOS-XE/XR/NX-OS) -> CSV.
+#
+# Rewritten after live-lab verification (decision 20): the legacy regex
+# silently dropped every two-token protocol code (O IA, O E2, D EX, ...)
+# and rendered `is`/route-age tokens into the next-hop and interface
+# columns.
+command: 'show\s+ip\s+route'
+platforms: 'ios|xe|xr|nx'
+strategy: line_regex_table
+row: |-
+  ^([A-Za-z*+%&][A-Za-z0-9*]{0,4}                # protocol code (C, L, S*, O, i, O*E2, ...)
+  (?:\s(?:IA|EX|E[12]|N[12]|L[12]|su|ia))?)      # two-token codes: O IA, O E2, D EX, i L1, ...
+  \s+
+  (\d+\.\d+\.\d+\.\d+(?:/\d+)?)                  # prefix (mask may live on the group header)
+  (?:\s+\[(\d+/\d+)\])?                           # [admin/metric]
+  (?:\s+via\s+(\d+\.\d+\.\d+\.\d+))?             # next-hop IP, comma excluded
+  (?:,\s*\d[\w:.]*)*                              # route age — dropped, declared
+  (?:\s+is\s+directly\s+connected)?               # connected-route phrasing
+  (?:,\s*(\S+))?                                  # egress interface
+  \s*$
+row_flags: [VERBOSE]
+header: proto,prefix,ad/metric,next_hop,interface
+dropped_fields: [route_age, ecmp_alternate_paths, subnet_group_headers]
+doc: >-
+  show ip route (IOS/IOS-XE) -> CSV; drops the Codes legend,
+  subnet-grouping headers, route-age fields and ECMP continuation lines
+  (all declared).

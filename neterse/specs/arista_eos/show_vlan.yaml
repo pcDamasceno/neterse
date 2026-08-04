@@ -1,0 +1,10 @@
+# bare `show vlan` (Arista EOS) -> CSV — the Cisco family spells it
+# `show vlan brief` (cisco/show_vlan_brief.yaml).
+command: '^show\s+vlan\s*$'
+platforms: 'eos|arista'
+strategy: line_regex_table
+#      1: VLAN ID   2: name   3: status   4: ports
+row: '^(\d+)\s+(\S+)\s+(active|act/unsup|sus\S*)\s*(.*)?$'
+header: vlan,name,status,ports
+strip_columns: [4]
+dropped_fields: []

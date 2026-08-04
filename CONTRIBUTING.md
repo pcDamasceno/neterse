@@ -1,27 +1,52 @@
 # Contributing to neterse
 
-Most contributions are **a spec dict plus fixtures — no parser code.**
-The bar is deliberately low; the CI gates are deliberately strict.
+Most contributions are **one YAML file plus fixtures — no parser code,
+no registry edit.** The bar is deliberately low; the CI gates are
+deliberately strict.
 
 ## Add a table-shaped command family (the common case)
 
-1. **Write the spec** in `neterse/specs.py`:
+1. **Write the spec** as `neterse/specs/<platform>/<family>.yaml` — the
+   vendor/command layout ntc-templates made familiar. The spec's id IS
+   the path (`arista_eos/show_ip_arp`); don't write an `id` key.
 
-```python
-{
-    "id": "arista_eos/show_ip_arp",
-    "command": r"show\s+ip\s+arp",          # scope tightly; exclude sibling subcommands
-    "platforms": r"eos",                     # regex over the caller's platform string; declare broadly
-    "strategy": "line_regex_table",          # or fixed_width_table
-    "row": r"^(\d+\.\d+\.\d+\.\d+)\s+(\S+)\s+(\S+)\s+(\S+)",
-    "header": "address,age,mac,interface",
-    "dropped_fields": (),                    # REQUIRED: the lossiness manifest
-},
+```yaml
+# show ip arp (Arista EOS) -> CSV.
+command: 'show\s+ip\s+arp'    # scope tightly; exclude sibling subcommands
+platforms: 'eos|arista'       # regex over the caller's platform string; declare broadly
+strategy: line_regex_table    # or fixed_width_table / kv_extract
+#      1: address   2: age   3: MAC   4: interface(s)
+row: '^(\d+\.\d+\.\d+\.\d+)\s+(\S+)\s+(\S+)\s+(\S+)'
+header: address,age,mac,interface
+dropped_fields: []            # REQUIRED: the lossiness manifest ([] = lossless)
 ```
 
-2. **Register it** at the END of `REGISTRY` in `neterse/registry.py` —
-   post-baseline entries always append after the legacy sequence, so
-   equal-length ties keep resolving to the baseline (decision 15).
+   Quote regexes with **single quotes** (or a `|-` block scalar for
+   multi-line `VERBOSE` patterns — see `cisco/show_ip_route.yaml`) so
+   backslashes stay literal; YAML double quotes would reject `\s`. The
+   existing files under `neterse/specs/` are the reference for every
+   field, including `profiles`, `row_flags`, `columns`,
+   `context_prefixes` and the `fixed_width_table` / `kv_extract`
+   strategies.
+
+2. **Compile it**: run
+
+   ```bash
+   python scripts/compile_specs.py
+   ```
+
+   This validates the spec **loudly** — the command/row regexes must
+   compile, header arity must match the captured groups (or `keywords`),
+   profiles must keep real columns and drop at least one, the manifest
+   is mandatory, unknown keys are rejected — and regenerates
+   `neterse/specs/_compiled.py`, the plain-Python module the runtime
+   imports (YAML never becomes a runtime dependency). Commit the YAML
+   **and** the regenerated file together; CI diff-gates them
+   (`compile_specs.py --check`), and so does the test suite.
+
+   No registry edit needed: specs without an explicit position in the
+   canonical order self-append after it, in sorted-id order
+   (decision 28).
 
 3. **Add fixture files** under
    `tests/fixtures/<platform>/<family>/`:
@@ -36,10 +61,10 @@ The bar is deliberately low; the CI gates are deliberately strict.
    the diagonal asserts your family genuinely shrinks (with and without
    the platform argument) and that the winner is your spec — not a false
    match; the cross-matrix asserts it fails open against every other
-   family's output and the edge inputs; the manifest test rejects specs
-   without `dropped_fields`. If the token CI job flags a missing
-   baseline entry, run `python scripts/update_token_baseline.py` and
-   commit the diff.
+   family's output and the edge inputs; the spec tests re-validate every
+   YAML source and reject undeclared manifests. If the token CI job
+   flags a missing baseline entry, run
+   `python scripts/update_token_baseline.py` and commit the diff.
 
 That's the whole contribution. In the PR description, paste the
 before/after character counts — `neterse audit tests/fixtures` prints them.
@@ -60,11 +85,14 @@ the format can be read before the spec is written.
 - **Scope the command regex tightly.** Exclude sibling subcommands with a
   negative lookahead rather than relying on smallest-wins to save you
   (see the interface-detail entry in `registry.py`).
-- **Zero dependencies.** The package imports the standard library only.
-  If your idea needs a parser or tokenizer, it belongs in an optional
-  extra or in Phase-2/3 tooling — open an issue first.
+- **Zero runtime dependencies.** The package imports the standard library
+  only — which is exactly why the YAML sources are compiled to
+  `_compiled.py` instead of parsed at import time. PyYAML lives in the
+  `test` extra; parsers (ntc-templates) live in the `textfsm` extra. If
+  your idea needs another dependency, open an issue first.
 - **Byte-parity discipline.** Don't edit the *code* in
-  `tests/legacy_snapshot.py`, ever.
+  `tests/legacy_snapshot.py`, ever, and don't hand-edit the *generated*
+  `neterse/specs/_compiled.py` — it gets regenerated over you.
   If you believe an existing family's *output* should change, that's a
   baseline decision: propose it in an issue; if accepted it gets a
   decision-log entry in `docs/DESIGN.md` alongside the code change. The
@@ -100,6 +128,6 @@ def _compress_my_thing(raw: str) -> str:
 
 ```bash
 git clone https://github.com/pcDamasceno/neterse && cd neterse
-pip install -e ".[test]"
-pytest            # ~2000 tests, a couple of seconds, no network
+pip install -e ".[test]"      # pytest + PyYAML (spec authoring/drift gate)
+pytest                        # ~2000 tests, a couple of seconds, no network
 ```

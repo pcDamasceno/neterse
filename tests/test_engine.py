@@ -26,8 +26,11 @@ from .corpus import ACL, BRIEF, COMMAND_FIXTURES, IP_INT_BRIEF, IP_ROUTE
 def test_every_spec_builds_and_declares():
     """Specs must compile, use known strategies, and carry a manifest —
     a spec without ``dropped_fields`` would silently regress to
-    'undeclared', losing exactly the vocabulary Phase 1 exists to add."""
-    assert len(SPECS) == 22
+    'undeclared', losing exactly the vocabulary Phase 1 exists to add.
+    The count is a floor, not a pin: the YAML↔compiled drift gate
+    (test_specs_yaml.py) now polices accidental spec loss, so adding a
+    family no longer edits this file."""
+    assert len(SPECS) >= 22
     ids = [s["id"] for s in SPECS]
     assert len(ids) == len(set(ids)), "duplicate spec ids"
     for spec in SPECS:
@@ -75,7 +78,9 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
         n not in legacy and ("/" in n or n in post_baseline_code)
         for n in names[15:]
     ), "post-baseline entries must follow the legacy sequence"
-    assert sum(1 for n in names if n.startswith("spec:")) == 22
+    spec_names = [n for n in names if n.startswith("spec:")]
+    assert len(spec_names) == len(set(spec_names)), "a spec registered twice"
+    assert len(spec_names) >= 22
     assert sum(1 for n in names if not n.startswith("spec:")) == 11
 
 

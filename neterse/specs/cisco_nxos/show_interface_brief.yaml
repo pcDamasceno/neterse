@@ -1,0 +1,14 @@
+# show interface brief (NX-OS) -> CSV; the two-line wrapped header and
+# dashed separators are dropped.
+command: '^show\s+int(?:erface|erfaces)?(?:\s+\S+)?\s+brief\s*$'
+platforms: 'nx'
+strategy: fixed_width_table
+keywords: [Ethernet, VLAN, Type, Mode, Status, Reason, Speed, Port]
+header: interface,vlan,type,mode,status,reason,speed,port_ch
+dropped_fields: []
+profiles:
+  updown:
+    keep: [interface, status, reason]
+doc: >-
+  show interface brief (NX-OS) -> CSV; the two-line wrapped header and
+  dashed separators are dropped.

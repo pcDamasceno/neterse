@@ -1,8 +1,9 @@
 """Generic strategies that turn declarative specs into compressors.
 
-A *spec* is a plain dict (stdlib-only by design — no YAML/TOML dependency;
-a YAML authoring front-end can layer on later without touching this
-engine). ``build(spec)`` compiles it into the same ``Callable[[str], str]``
+A *spec* is a plain dict (stdlib-only by design — no YAML/TOML dependency
+at runtime; the YAML authoring front-end compiles down to these dicts at
+development time, see ``specs/`` and decision 27, without this engine
+ever knowing). ``build(spec)`` compiles it into the same ``Callable[[str], str]``
 shape as a hand-written compressor, under the same fail-open contract: the
 built function returns the raw input whenever it cannot produce a smaller,
 faithful rendering.

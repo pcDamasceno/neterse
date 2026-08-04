@@ -1,11 +1,15 @@
 """The compressor registry — canonical order, both tiers.
 
 One ordered list of :class:`Entry` interleaving spec-built compressors
-(``specs.py`` via ``engine.build``) and hand-written code compressors
-(``_compressors.py``), in exactly the registration order of the
-pre-extraction implementation. Order is load-bearing only for tie-breaks
-(equal-length candidates: first wins); keeping it frozen makes byte-parity
-with the baseline unconditional rather than probabilistic.
+(the YAML-authored ``specs/`` package via ``engine.build``) and
+hand-written code compressors (``_compressors.py``), in exactly the
+registration order of the pre-extraction implementation. Order is
+load-bearing only for tie-breaks (equal-length candidates: first wins);
+keeping it frozen makes byte-parity with the baseline unconditional
+rather than probabilistic. Specs with no explicit position — the normal
+case for a new YAML contribution — self-append after the whole canonical
+sequence in sorted-id order (decision 28), so contributing a family
+never requires editing this file.
 
 ``platforms`` on an entry is a *skip filter*: when the caller supplies a
 platform string and the entry declares platforms that don't match, the
@@ -187,6 +191,26 @@ REGISTRY: List[Entry] = [
         dropped_fields=("empty_sections", "source_neighbor_column_headers"),
     ),
 ]
+
+
+def _auto_appended(specs: list, ordered_ids: set) -> List[Entry]:
+    """Entries for every spec without an explicit position above — the
+    normal case for a new YAML contribution (decision 28). They append
+    strictly AFTER the whole canonical sequence, in sorted-id order:
+    deterministic without a registry edit, and equal-length ties still
+    resolve to the explicitly ordered entries. Pin a spec in the list
+    above only when its position genuinely matters."""
+    return [
+        _spec_entry(spec)
+        for spec in sorted(specs, key=lambda s: s["id"])
+        if spec["id"] not in ordered_ids
+    ]
+
+
+_EXPLICITLY_ORDERED = {
+    e.name[len("spec:"):] for e in REGISTRY if e.name.startswith("spec:")
+}
+REGISTRY.extend(_auto_appended(SPECS, _EXPLICITLY_ORDERED))
 
 
 def register(

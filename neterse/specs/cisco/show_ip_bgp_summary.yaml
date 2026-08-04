@@ -1,0 +1,12 @@
+# show ip bgp summary (IOS family) -> CSV.
+#
+# Decision 24: the first number after the neighbor IP is the V column
+# (BGP version, constant 4), NOT the AS — the legacy regex captured it
+# as "as", hiding which neighbors are eBGP.
+command: 'show\s+(?:ip\s+)?bgp\s+summary'
+platforms: 'ios|xe|xr|nx'
+strategy: line_regex_table
+#      1: neighbor   (skip V)   2: AS   (skip msg fields)   3: state/pfxrcd
+row: '^(\d+\.\d+\.\d+\.\d+)\s+\d+\s+(\d+)\s+.*?\s+(\S+)\s*$'
+header: neighbor,as,state_pfxrcd
+dropped_fields: [version, msgrcvd, msgsent, tblver, inq, outq, up_down]
