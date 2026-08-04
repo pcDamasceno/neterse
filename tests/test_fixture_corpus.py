@@ -58,19 +58,35 @@ def test_diagonal_shrinks_with_platform_and_without(fixture, command):
         assert 0 < len(best.text) < len(fixture.body)
 
 
+# Fixture families implemented as CODE compressors (block-shaped output
+# no table strategy fits — decision 26). The diagonal still enforces that
+# coverage comes from the family's OWN declared entry, never a false
+# match; these are just named functions instead of vendor specs.
+CODE_FAMILY_WINNERS = {
+    "cisco_ios/show_ip_protocols": {"_compress_ip_protocols"},
+}
+
+
 @pytest.mark.parametrize("fixture,command", DIAGONAL)
 def test_diagonal_winner_is_the_familys_own_spec(fixture, command):
     """Coverage must come from the family's own vendor entry, not a false
     match that happens to shrink — that would report coverage that
     doesn't survive a platform filter or a format drift. Matching is by
     vendor stem: a cisco_ios fixture may be won by `spec:cisco/...` or
-    `spec:cisco_ios/...` alike."""
+    `spec:cisco_ios/...` alike — or by the family's declared code entry
+    (CODE_FAMILY_WINNERS)."""
     vendor = fixture.platform.split("_")[0]
     candidates = render(fixture.body, command=command, platform=fixture.platform)
     best = min(candidates, key=lambda c: len(c.text))
-    assert best.source.startswith(f"spec:{vendor}"), (
-        f"{fixture.label}: winner was {best.source}"
-    )
+    declared = CODE_FAMILY_WINNERS.get(fixture.label)
+    if declared is not None:
+        assert best.source in declared, (
+            f"{fixture.label}: winner was {best.source}"
+        )
+    else:
+        assert best.source.startswith(f"spec:{vendor}"), (
+            f"{fixture.label}: winner was {best.source}"
+        )
 
 
 def test_wrong_platform_removes_the_vendor_candidates():

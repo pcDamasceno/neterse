@@ -60,11 +60,16 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
     # entries append strictly AFTER it so ties keep resolving to baseline
     assert names[14] == "_compress_portchannel_summary"
     legacy = set(names[:15])
+    # Post-baseline entries are vendor specs ("<vendor>/<family>") or the
+    # declared post-baseline code compressors (block-shaped families no
+    # table strategy fits — decision 26).
+    post_baseline_code = {"_compress_ip_protocols"}
     assert all(
-        "/" in n and n not in legacy for n in names[15:]
+        n not in legacy and ("/" in n or n in post_baseline_code)
+        for n in names[15:]
     ), "post-baseline entries must follow the legacy sequence"
     assert sum(1 for n in names if n.startswith("spec:")) == 20
-    assert sum(1 for n in names if not n.startswith("spec:")) == 5
+    assert sum(1 for n in names if not n.startswith("spec:")) == 6
 
 
 # ---------------------------------------------------------------------------

@@ -164,3 +164,74 @@ def test_cdp_neighbors_detail_stays_failopen():
         "Platform: Linux Unix,  Capabilities: Router\n"
     )
     assert optimize("show cdp neighbors detail", detail) == detail
+
+
+# ---------------------------------------------------------------------------
+# show ip protocols (decision 26) — block output, code compressor
+# ---------------------------------------------------------------------------
+
+def test_ip_protocols_blocks_and_values_survive():
+    raw = _body("cisco_ios/show_ip_protocols")
+    out = optimize("show ip protocols", raw)
+    lines = out.splitlines()
+    assert lines[0] == "*** IP Routing is NSF aware ***"
+    bgp = next(l for l in lines if l.startswith('proto "bgp 200"'))
+    assert "neighbors=192.168.12.1; 192.168.23.3; 192.168.34.4" in bgp
+    assert "igp_sync=disabled" in bgp
+    assert "auto_summary=disabled" in bgp
+    assert "distance=external 20 internal 200 local 200" in bgp
+    assert "sources=192.168.34.4 200 00:13:28; 192.168.12.1 20 00:13:27; " \
+           "192.168.23.3 200 00:13:28" in bgp
+    ospf = next(l for l in lines if l.startswith('proto "ospf 1"'))
+    assert "router_id=22.2.2.2" in ospf
+    assert "areas=1. 1 normal 0 stub 0 nssa" in ospf
+    assert "networks=192.168.23.0 0.0.0.255 area 0" in ospf
+    assert "distance=default 110" in ospf
+    app = next(l for l in lines if l.startswith('proto "application"'))
+    assert "updates_every=0s" in app
+    assert "invalid=0 holddown=0 flushed=0" in app
+    assert "filters=none" in app
+    # empty list sections are omitted (declared), sub-table headers gone
+    assert "networks=" not in app
+    assert "sources=" not in app
+    assert "FiltIn" not in out and "Last Update" not in out
+    assert len(out) < len(raw) * 0.6
+
+
+def test_ip_protocols_unknown_lines_survive_verbatim():
+    raw = (
+        'Routing Protocol is "eigrp 10"\n'
+        "  Outgoing update filter list for all interfaces is not set\n"
+        "  EIGRP-IPv4 Protocol for AS(10)\n"
+        "    Metric weight K1=1, K2=0, K3=1, K4=0, K5=0\n"
+        "  Maximum path: 4\n"
+    )
+    out = optimize("show ip protocols", raw)
+    assert "EIGRP-IPv4 Protocol for AS(10)" in out
+    assert "Metric weight K1=1, K2=0, K3=1, K4=0, K5=0" in out
+    assert "outgoing_filter=none" in out
+    assert "max_path=4" in out
+
+
+def test_ip_protocols_winner_and_manifest():
+    raw = _body("cisco_ios/show_ip_protocols")
+    candidates = render(raw, command="show ip protocols", platform="cisco_ios")
+    best = min(candidates, key=lambda c: len(c.text))
+    assert best.source == "_compress_ip_protocols"
+    assert best.dropped_fields == (
+        "empty_sections", "source_neighbor_column_headers"
+    )
+
+
+def test_ip_protocols_summary_not_claimed_and_failopen():
+    summary = (
+        "Index Process Name\n"
+        "0     connected\n"
+        "1     static\n"
+        "3     ospf 1\n"
+    )
+    # `summary` is a different, tabular format — the $-anchored command
+    # regex must not claim it...
+    assert optimize("show ip protocols summary", summary) == summary
+    # ...and blockless bodies fail open even on the covered spelling.
+    assert optimize("show ip protocols", summary) == summary

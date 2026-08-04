@@ -150,6 +150,15 @@ REGISTRY: List[Entry] = [
     # -- Live-lab gap fixes (bgp_fundamentals verification, decision 25+):
     #    still strictly appended, same tie-break reasoning as above.
     _spec_entry(_BY_ID["cisco_ios/show_cdp_neighbors"]),
+    _code_entry(
+        # Block-structured (one "Routing Protocol is ..." block per
+        # process) — no table strategy fits; unknown lines are preserved
+        # verbatim inside the rendering (decision 26). The $-anchor keeps
+        # `show ip protocols summary` (a different, tabular format) out.
+        r"show\s+ip\s+protocols?(?:\s+vrf\s+\S+)?\s*$",
+        _c._compress_ip_protocols,
+        dropped_fields=("empty_sections", "source_neighbor_column_headers"),
+    ),
 ]
 
 
