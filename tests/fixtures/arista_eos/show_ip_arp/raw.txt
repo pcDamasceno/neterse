@@ -1,0 +1,4 @@
+Address         Age (sec)  Hardware Addr   Interface
+172.28.136.1      0:00:00  001c.730b.1685  Management1
+10.0.0.1          0:04:12  2899.3a0e.5de1  Ethernet1
+10.0.0.9          0:11:33  2899.3a0e.aaa1  Ethernet2, Port-Channel10

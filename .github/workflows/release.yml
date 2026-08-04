@@ -1,0 +1,53 @@
+name: release
+
+# Publishes neterse to PyPI via Trusted Publishing when a version tag is
+# pushed. One-time setup and the full checklist: docs/RELEASING.md.
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tag must match the package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VERSION=$(python -c "import re,pathlib;print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('neterse/__init__.py').read_text()).group(1))")
+          test "$TAG" = "$VERSION" || { echo "tag v$TAG != neterse.__version__ $VERSION"; exit 1; }
+      - name: Build sdist + wheel
+        run: pip install build && python -m build
+      - name: Smoke-test the wheel (import, CLI, zero-dep guard)
+        run: |
+          pip install dist/*.whl
+          python - <<'EOF'
+          import importlib.metadata as md
+          import neterse
+          deps = md.requires("neterse") or []
+          runtime = [d for d in deps if "extra ==" not in d]
+          assert not runtime, f"runtime deps crept in: {runtime}"
+          print("neterse", neterse.__version__, "- zero runtime dependencies: OK")
+          EOF
+          neterse --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write        # Trusted Publishing (no API token stored)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

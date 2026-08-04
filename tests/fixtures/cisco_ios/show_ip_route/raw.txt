@@ -1,0 +1,41 @@
+Codes: L - local, C - connected, S - static, R - RIP, M - mobile, B - BGP
+       D - EIGRP, EX - EIGRP external, O - OSPF, IA - OSPF inter area 
+       N1 - OSPF NSSA external type 1, N2 - OSPF NSSA external type 2
+       E1 - OSPF external type 1, E2 - OSPF external type 2, m - OMP
+       n - NAT, Ni - NAT inside, No - NAT outside, Nd - NAT DIA
+       i - IS-IS, su - IS-IS summary, L1 - IS-IS level-1, L2 - IS-IS level-2
+       ia - IS-IS inter area, * - candidate default, U - per-user static route
+       H - NHRP, G - NHRP registered, g - NHRP registration summary
+       o - ODR, P - periodic downloaded static route, l - LISP
+       a - application route
+       + - replicated route, % - next hop override, p - overrides from PfR
+       & - replicated local route overrides by connected
+
+Gateway of last resort is not set
+
+      1.0.0.0/8 is variably subnetted, 8 subnets, 2 masks
+C        1.1.0.0/24 is directly connected, Loopback0
+L        1.1.0.1/32 is directly connected, Loopback0
+C        1.1.1.0/24 is directly connected, Loopback1
+L        1.1.1.1/32 is directly connected, Loopback1
+C        1.1.2.0/24 is directly connected, Loopback2
+L        1.1.2.1/32 is directly connected, Loopback2
+C        1.1.3.0/24 is directly connected, Loopback3
+L        1.1.3.1/32 is directly connected, Loopback3
+      2.0.0.0/32 is subnetted, 1 subnets
+O IA     2.2.2.2 [110/11] via 12.12.12.2, 00:06:01, Ethernet0/1
+      3.0.0.0/24 is subnetted, 1 subnets
+O IA     3.3.3.0 [110/21] via 12.12.12.2, 00:06:01, Ethernet0/1
+      4.0.0.0/24 is subnetted, 5 subnets
+O E2     4.4.0.0 [110/20] via 12.12.12.2, 00:06:01, Ethernet0/1
+O E2     4.4.1.0 [110/20] via 12.12.12.2, 00:06:01, Ethernet0/1
+O E2     4.4.2.0 [110/20] via 12.12.12.2, 00:06:01, Ethernet0/1
+O E2     4.4.3.0 [110/20] via 12.12.12.2, 00:06:01, Ethernet0/1
+O IA     4.4.4.0 [110/31] via 12.12.12.2, 00:06:01, Ethernet0/1
+      12.0.0.0/8 is variably subnetted, 2 subnets, 2 masks
+C        12.12.12.0/24 is directly connected, Ethernet0/1
+L        12.12.12.1/32 is directly connected, Ethernet0/1
+      23.0.0.0/24 is subnetted, 1 subnets
+O IA     23.23.23.0 [110/20] via 12.12.12.2, 00:06:01, Ethernet0/1
+      34.0.0.0/24 is subnetted, 1 subnets
+O IA     34.34.34.0 [110/30] via 12.12.12.2, 00:06:01, Ethernet0/1

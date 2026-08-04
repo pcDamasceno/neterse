@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# `neterse` = "network terse": the natural name `terse` is squatted on PyPI
+# by an abandoned 2019 package. Distribution, import, and CLI
+# share the one name.
+name = "neterse"
+version = "0.1.0"                     # keep in lockstep with neterse.__version__
+description = "neterse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Pedro Damasceno" }]
+keywords = [
+    "network-automation", "llm", "tokens", "cli", "toon",
+    "cisco", "nxos", "ios", "agents", "prompt-engineering",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Networking",
+]
+# Invariant: the runtime dependency list stays EMPTY. Parsers and
+# tokenizers are extras; the core imports the standard library only.
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/pcDamasceno/neterse"
+Issues = "https://github.com/pcDamasceno/neterse/issues"
+
+[project.scripts]
+neterse = "neterse.audit:main"
+
+[project.optional-dependencies]
+test = ["pytest"]
+# Later phases: textfsm = ["ntc-templates"], tokens = ["tiktoken"], …
+
+[tool.setuptools]
+packages = ["neterse"]
+
+[tool.setuptools.package-data]
+neterse = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

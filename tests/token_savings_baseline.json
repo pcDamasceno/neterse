@@ -1,0 +1,168 @@
+{
+  "encoding": "o200k_base",
+  "tiktoken_version": "0.13.0",
+  "total_raw_tokens": 5959,
+  "total_neterse_tokens": 3355,
+  "families": {
+    "acl": {
+      "raw_tokens": 49,
+      "neterse_tokens": 32
+    },
+    "arista_eos/show_interfaces_status": {
+      "raw_tokens": 131,
+      "neterse_tokens": 29
+    },
+    "arista_eos/show_ip_arp": {
+      "raw_tokens": 106,
+      "neterse_tokens": 97
+    },
+    "arista_eos/show_vlan": {
+      "raw_tokens": 48,
+      "neterse_tokens": 40
+    },
+    "aruba_aoscx/show_interface_brief": {
+      "raw_tokens": 110,
+      "neterse_tokens": 87
+    },
+    "aruba_aoscx/show_vlan": {
+      "raw_tokens": 81,
+      "neterse_tokens": 72
+    },
+    "bgp-summary": {
+      "raw_tokens": 126,
+      "neterse_tokens": 34
+    },
+    "bgp-summary-bare": {
+      "raw_tokens": 126,
+      "neterse_tokens": 34
+    },
+    "cdp": {
+      "raw_tokens": 85,
+      "neterse_tokens": 34
+    },
+    "cisco_ios/show_cdp_neighbors": {
+      "raw_tokens": 178,
+      "neterse_tokens": 104
+    },
+    "cisco_ios/show_ip_bgp_summary": {
+      "raw_tokens": 318,
+      "neterse_tokens": 44
+    },
+    "cisco_ios/show_ip_interface_brief": {
+      "raw_tokens": 120,
+      "neterse_tokens": 91
+    },
+    "cisco_ios/show_ip_ospf_neighbor": {
+      "raw_tokens": 88,
+      "neterse_tokens": 80
+    },
+    "cisco_ios/show_ip_protocols": {
+      "raw_tokens": 454,
+      "neterse_tokens": 266
+    },
+    "cisco_ios/show_ip_route": {
+      "raw_tokens": 968,
+      "neterse_tokens": 441
+    },
+    "counters-errors": {
+      "raw_tokens": 187,
+      "neterse_tokens": 103
+    },
+    "eigrp": {
+      "raw_tokens": 162,
+      "neterse_tokens": 123
+    },
+    "eigrp-vrf": {
+      "raw_tokens": 162,
+      "neterse_tokens": 123
+    },
+    "etherchannel": {
+      "raw_tokens": 126,
+      "neterse_tokens": 34
+    },
+    "intf-brief-nxos": {
+      "raw_tokens": 68,
+      "neterse_tokens": 56
+    },
+    "intf-detail-down": {
+      "raw_tokens": 106,
+      "neterse_tokens": 43
+    },
+    "intf-detail-ios": {
+      "raw_tokens": 70,
+      "neterse_tokens": 56
+    },
+    "intf-detail-nxos": {
+      "raw_tokens": 335,
+      "neterse_tokens": 60
+    },
+    "intf-status": {
+      "raw_tokens": 122,
+      "neterse_tokens": 92
+    },
+    "intf-status-single": {
+      "raw_tokens": 122,
+      "neterse_tokens": 92
+    },
+    "ip-int-brief": {
+      "raw_tokens": 79,
+      "neterse_tokens": 57
+    },
+    "ip-int-brief-abbrev": {
+      "raw_tokens": 79,
+      "neterse_tokens": 57
+    },
+    "ip-route": {
+      "raw_tokens": 138,
+      "neterse_tokens": 121
+    },
+    "ip-route-vrf": {
+      "raw_tokens": 138,
+      "neterse_tokens": 121
+    },
+    "juniper_junos/show_interfaces_terse": {
+      "raw_tokens": 163,
+      "neterse_tokens": 163
+    },
+    "juniper_junos/show_ospf_neighbor": {
+      "raw_tokens": 82,
+      "neterse_tokens": 75
+    },
+    "lldp": {
+      "raw_tokens": 85,
+      "neterse_tokens": 34
+    },
+    "mikrotik_routeros/interface_print": {
+      "raw_tokens": 101,
+      "neterse_tokens": 67
+    },
+    "mikrotik_routeros/ip_address_print": {
+      "raw_tokens": 100,
+      "neterse_tokens": 77
+    },
+    "ospf-neighbor": {
+      "raw_tokens": 93,
+      "neterse_tokens": 84
+    },
+    "portchannel": {
+      "raw_tokens": 126,
+      "neterse_tokens": 34
+    },
+    "run-abbrev": {
+      "raw_tokens": 66,
+      "neterse_tokens": 41
+    },
+    "running-config": {
+      "raw_tokens": 66,
+      "neterse_tokens": 41
+    },
+    "version": {
+      "raw_tokens": 147,
+      "neterse_tokens": 74
+    },
+    "vlan-brief": {
+      "raw_tokens": 48,
+      "neterse_tokens": 42
+    }
+  }
+}

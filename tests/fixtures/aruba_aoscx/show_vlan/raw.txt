@@ -1,0 +1,6 @@
+--------------------------------------------------------------------------------
+VLAN  Name              Status  Reason                Type      Interfaces
+--------------------------------------------------------------------------------
+1     DEFAULT_VLAN_1    up      ok                    default   1/1/1-1/1/24
+10    USERS             up      ok                    static    1/1/5,1/1/6
+99    MGMT              down    no_member_forwarding  static
