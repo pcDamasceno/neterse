@@ -1,8 +1,8 @@
 {
   "encoding": "o200k_base",
   "tiktoken_version": "0.13.0",
-  "total_raw_tokens": 5505,
-  "total_neterse_tokens": 3089,
+  "total_raw_tokens": 5959,
+  "total_neterse_tokens": 3355,
   "families": {
     "acl": {
       "raw_tokens": 49,
@@ -55,6 +55,10 @@
     "cisco_ios/show_ip_ospf_neighbor": {
       "raw_tokens": 88,
       "neterse_tokens": 80
+    },
+    "cisco_ios/show_ip_protocols": {
+      "raw_tokens": 454,
+      "neterse_tokens": 266
     },
     "cisco_ios/show_ip_route": {
       "raw_tokens": 968,

@@ -1,0 +1,3 @@
+# Spellings agents actually typed for this family (bgp lab runs)
+show ip protocols
+show ip protocol

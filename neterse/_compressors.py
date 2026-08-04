@@ -376,3 +376,125 @@ def _compress_portchannel_summary(raw: str) -> str:
     if len(rows) < 2:
         return raw
     return "\n".join(rows)
+
+
+# ---- show ip protocols (IOS/IOS-XE) ---------------------------------------
+# Block-structured output — one "Routing Protocol is ..." block per process
+# — that no table strategy fits. Known boilerplate collapses to key=value
+# parts; list sections (networks / sources / neighbors / passive) join
+# their items; ANY unrecognized line inside a block is preserved verbatim
+# (whitespace-collapsed), so format drift degrades compression, never
+# faithfulness.
+
+_IPPROTO_HEADER = re.compile(r'^Routing Protocol is "([^"]+)"')
+_IPPROTO_SECTIONS = {
+    "Routing for Networks:": "networks",
+    "Routing Information Sources:": "sources",
+    "Neighbor(s):": "neighbors",
+    "Passive Interface(s):": "passive",
+}
+# Static column headers inside list sections — presentation, not data.
+_IPPROTO_SECTION_HEADER = re.compile(
+    r"^(?:Gateway\s+Distance\s+Last Update"
+    r"|Address\s+FiltIn\s+FiltOut\s+DistIn\s+DistOut\s+Weight\s+RouteMap)$"
+)
+_IPPROTO_FILTER_NOT_SET = re.compile(
+    r"^(Outgoing|Incoming) update filter list for all interfaces is not set$"
+)
+_IPPROTO_LINES = [
+    (re.compile(r"^Sending updates every (\d+) seconds$"), "updates_every={0}s"),
+    (re.compile(r"^Invalid after (\d+) seconds, hold down (\d+), flushed after (\d+)$"),
+     "invalid={0} holddown={1} flushed={2}"),
+    (re.compile(r"^IGP synchronization is (\S+)$"), "igp_sync={0}"),
+    (re.compile(r"^Automatic route summarization is (\S+)$"), "auto_summary={0}"),
+    (re.compile(r"^Automatic network summarization is (.+)$"), "net_summary={0}"),
+    (re.compile(r"^Router ID (\S+)$"), "router_id={0}"),
+    (re.compile(r"^Number of areas in this router is (.+)$"), "areas={0}"),
+    (re.compile(r"^Maximum path: (\d+)$"), "max_path={0}"),
+    (re.compile(r"^Distance: \(default is (\d+)\)$"), "distance=default {0}"),
+    (re.compile(r"^Distance: (.+)$"), "distance={0}"),
+]
+
+
+def _compress_ip_protocols(raw: str) -> str:
+    """``show ip protocols`` (IOS) → one line per routing-protocol block.
+
+    ``proto "bgp 200": filters=none | igp_sync=disabled | neighbors=… |
+    distance=external 20 internal 200 local 200``. Empty list sections
+    are omitted and static sub-table column headers dropped (both
+    declared); every unrecognized block line survives verbatim.
+    """
+    lines = raw.splitlines()
+    out: list = []
+    parts: Optional[list] = None      # None while in the preamble
+    filters: set = set()
+    filter_slot = -1
+    section: Optional[str] = None
+    section_indent = 0
+    section_items: list = []
+
+    def _flush_section() -> None:
+        nonlocal section, section_items
+        if section and section_items:
+            parts.append(f"{section}=" + "; ".join(section_items))
+        section, section_items = None, []
+
+    def _flush_block() -> None:
+        nonlocal parts, filters, filter_slot
+        if parts is None:
+            return
+        _flush_section()
+        if filters:
+            label = (
+                "filters=none" if len(filters) == 2
+                else f"{next(iter(filters)).lower()}_filter=none"
+            )
+            parts[filter_slot] = label
+        rendered = [p for p in parts if p is not None]
+        head, rest = rendered[0], rendered[1:]
+        out.append(f"{head}: " + " | ".join(rest) if rest else head)
+        parts, filters, filter_slot = None, set(), -1
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if parts is not None:
+                _flush_section()
+            continue
+        m = _IPPROTO_HEADER.match(stripped)
+        if m:
+            _flush_block()
+            parts = [f'proto "{m.group(1)}"']
+            continue
+        if parts is None:
+            out.append(stripped)                     # preamble, verbatim
+            continue
+        indent = len(line) - len(line.lstrip())
+        if section is not None:
+            if indent > section_indent:
+                if not _IPPROTO_SECTION_HEADER.match(stripped):
+                    section_items.append(re.sub(r"\s+", " ", stripped))
+                continue
+            _flush_section()                         # dedent: normal line again
+        if stripped in _IPPROTO_SECTIONS:
+            section = _IPPROTO_SECTIONS[stripped]
+            section_indent = indent
+            continue
+        fm = _IPPROTO_FILTER_NOT_SET.match(stripped)
+        if fm:
+            if filter_slot < 0:
+                filter_slot = len(parts)
+                parts.append(None)                   # placeholder, filled at flush
+            filters.add(fm.group(1))
+            continue
+        for rx, template in _IPPROTO_LINES:
+            lm = rx.match(stripped)
+            if lm:
+                parts.append(template.format(*lm.groups()))
+                break
+        else:
+            parts.append(re.sub(r"\s+", " ", stripped))   # unknown: keep verbatim
+    _flush_block()
+    if not any(p.startswith('proto "') for p in out):
+        return raw
+    return "\n".join(out)

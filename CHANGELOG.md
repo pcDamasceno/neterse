@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **`show ip protocols` covered (decision 26).** Block-structured IOS
+  output no table strategy fits — new code compressor renders one line
+  per routing-protocol block (`proto "bgp 200": filters=none |
+  neighbors=… | distance=…`), 56–61% fewer chars on the lab captures
+  (996–1557 chars/call reached the model raw before). Known boilerplate
+  collapses to key=value, list sections join their items, and every
+  unrecognized line survives verbatim — format drift degrades
+  compression, never faithfulness. Empty list sections and static
+  sub-table column headers are dropped, declared. Fixture-tree family
+  with a declared code winner (`CODE_FAMILY_WINNERS`); the `$`-anchored
+  command regex keeps `show ip protocols summary` out.
 - **IOS `show cdp neighbors` covered (decision 25).** The legacy
   cdp/lldp entry expects single-token row values and fails open on real
   IOS output (`Eth 0/2`, `Linux Uni` — bgp_fundamentals lab, 547–623
