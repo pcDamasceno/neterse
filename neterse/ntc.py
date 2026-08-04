@@ -27,9 +27,48 @@ from typing import List, Optional
 
 import neterse
 
-__all__ = ["parse", "render", "optimize"]
+__all__ = ["parse", "platform_keys", "render", "optimize"]
 
 logger = logging.getLogger("neterse")
+
+# Transport suffixes runner libraries append to platform strings
+# ("cisco_ios_ssh" is a netmiko device_type, not an ntc platform).
+_TRANSPORT_SUFFIXES = ("_ssh", "_telnet", "_serial")
+
+# Platform spellings the ecosystem uses that ntc-templates' index does
+# not key (verified against the real index): netmiko types every IOS-XE
+# box `cisco_xe` and itself retries as `cisco_ios` (ntc ships zero
+# cisco_xe templates); scrapli's IOSXEDriver stamps `cisco_iosxe`, and
+# its XR sibling spelling appears in the wild too. Remaps are tried
+# LAST — only after the caller's own spelling failed — so they can only
+# ever recover a parse, never change one.
+_PLATFORM_REMAPS = {
+    "cisco_xe": "cisco_ios",
+    "cisco_iosxe": "cisco_ios",
+    "cisco_iosxr": "cisco_xr",
+}
+
+
+def platform_keys(platform: str) -> "List[str]":
+    """Template keys to try, in order, for a caller's platform string —
+    plain ntc names, netmiko ``device_type``s and scrapli
+    ``textfsm_platform``s all resolve. Suffix-stripped first (ntc's
+    normal keying — and strictly better than netmiko's own verbatim
+    keying for ``_telnet``/``_serial`` users), the verbatim string
+    second (ntc keys every WLC template on ``cisco_wlc_ssh`` itself),
+    a known remap last."""
+    stripped = platform
+    for suffix in _TRANSPORT_SUFFIXES:
+        if platform.endswith(suffix):
+            stripped = platform[: -len(suffix)]
+            break
+    keys = [stripped]
+    if platform != stripped:
+        keys.append(platform)
+    remap = _PLATFORM_REMAPS.get(stripped)
+    if remap and remap not in keys:
+        keys.append(remap)
+    return keys
 
 
 def parse(
@@ -40,9 +79,11 @@ def parse(
     ``None`` — never an exception — when the ``textfsm`` extra is not
     installed, ntc-templates has no template for ``(platform, command)``,
     the template fails to match, or the result is not row-shaped. The
-    platform string uses ntc-templates spelling (``cisco_ios``,
-    ``arista_eos``, …) — the same strings ``render(platform=...)``
-    already takes.
+    platform string may be anything the ecosystem hands you — an ntc
+    spelling (``cisco_ios``), a netmiko ``device_type``
+    (``cisco_ios_ssh``, ``cisco_xe``), a scrapli ``textfsm_platform``
+    (``cisco_iosxe``) — the :func:`platform_keys` ladder tries what
+    actually resolves.
     """
     try:
         from ntc_templates.parse import parse_output
@@ -52,20 +93,21 @@ def parse(
             "(pip install neterse[textfsm]); skipping the parsed tier"
         )
         return None
-    try:
-        rows = parse_output(platform=platform, command=command, data=raw_output)
-    except Exception:
-        logger.debug(
-            "neterse.ntc: no template match for (%s, '%s'), skipping",
-            platform, command, exc_info=True,
-        )
-        return None
-    if (
-        isinstance(rows, list)
-        and rows
-        and all(isinstance(r, dict) for r in rows)
-    ):
-        return rows
+    for key in platform_keys(platform):
+        try:
+            rows = parse_output(platform=key, command=command, data=raw_output)
+        except Exception:
+            logger.debug(
+                "neterse.ntc: no template match for (%s, '%s'), skipping",
+                key, command, exc_info=True,
+            )
+            continue
+        if (
+            isinstance(rows, list)
+            and rows
+            and all(isinstance(r, dict) for r in rows)
+        ):
+            return rows
     return None
 
 

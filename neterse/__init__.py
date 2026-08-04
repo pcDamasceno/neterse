@@ -5,12 +5,26 @@ for LLM context.
 
 Public API:
 
+* :func:`compact` — the one verb: the smallest faithful text for
+  whatever a runner or parser handed you. Dispatches on the SHAPE of
+  its argument (a connection, a response object, raw text, parsed
+  rows), never on the producing library — netmiko, scrapli, NAPALM
+  getters and future libraries all enter here (decision 32; foreign
+  response objects plug in via :mod:`neterse.sources`).
 * :func:`render` — produce every shrinking :class:`Candidate` for a
   command's output. The library never picks a winner; policy (e.g.
   "smallest wins"), metrics, and caching belong to the consumer.
 * :func:`optimize` — convenience wrapper preserving the historical
   behavior byte-for-byte: smallest candidate's text, or the raw output
   unchanged when nothing shrinks it.
+* :func:`render_parsed` / :func:`optimize_parsed` — the rows-only entry
+  points for output that arrives ALREADY parsed (netmiko
+  ``use_textfsm=True``, scrapli ``textfsm_parse_output()``, an API or
+  gNMI call) with no raw CLI text in hand: candidates are gated against
+  the compact JSON a consumer would otherwise send, and
+  ``optimize_parsed`` returns the smallest of the two (strings pass
+  through untouched — a parser's raw-text fallback is :func:`optimize`'s
+  business).
 * :func:`register` — plugin escape hatch: bind your own compressor to a
   command regex, optionally scoped by ``platforms`` and carrying a
   ``dropped_fields`` manifest.
@@ -56,11 +70,13 @@ Invariants — enforced here, relied on by every consumer:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
 from . import parsed as _parsed_tier
+from . import sources as _sources
 from .registry import (  # noqa: F401  (re-exported)
     Entry,
     REGISTRY,
@@ -74,11 +90,14 @@ __version__ = "0.1.0"
 __all__ = [
     "Candidate",
     "Entry",
+    "compact",
     "iter_compressors",
     "iter_entries",
     "optimize",
+    "optimize_parsed",
     "register",
     "render",
+    "render_parsed",
     "__version__",
 ]
 
@@ -193,6 +212,171 @@ def render(
                     )
                 )
     return candidates
+
+
+def compact(
+    source: Any,
+    command: Optional[str] = None,
+    *,
+    platform: Optional[str] = None,
+    profile: str = "default",
+    **run_kwargs: Any,
+) -> str:
+    """The one verb: the smallest faithful text for whatever a runner or
+    parser handed you — library-independent by design (decision 32).
+    Dispatch is on the SHAPE of *source*, never on its library:
+
+    * a **connection** — anything with ``send_command`` (netmiko,
+      scrapli, a work-alike): runs *command* (extra keyword arguments
+      pass through to the library call) and compacts what comes back.
+      The platform is read off the connection (netmiko ``device_type``,
+      scrapli ``textfsm_platform``) unless given.
+    * a **response object** — anything an adapter recognizes (scrapli's
+      ``Response`` ships in the box; see :mod:`neterse.sources`): raw
+      text, command, platform and pre-parsed rows all come off the
+      object; explicit arguments override what it carries.
+    * a **raw string**: the classic path — *command* names it, and with
+      the ``textfsm`` extra installed ntc-templates parses it so both
+      tiers compete.
+    * **structured rows** — netmiko ``use_textfsm=True``, NAPALM
+      getters, gNMI, plain dicts/lists: re-encoded header-once against
+      their compact-JSON baseline (:func:`optimize_parsed`).
+
+    Fail-open like everything else: whatever cannot shrink comes back
+    unchanged, and no data path raises. (Misuse is different — a
+    connection without *command*, or run kwargs without a connection,
+    is a ``TypeError``: there is no data to fail open with.)
+    """
+    if callable(getattr(source, "send_command", None)):
+        if not command:
+            raise TypeError(
+                "compact(connection, ...) needs the command to run, e.g. "
+                'compact(conn, "show ip interface brief")'
+            )
+        output = source.send_command(command, **run_kwargs)
+        if platform is None:
+            for attr in ("device_type", "textfsm_platform"):
+                value = getattr(source, attr, None)
+                if isinstance(value, str) and value:
+                    platform = value
+                    break
+        return compact(output, command, platform=platform, profile=profile)
+    if run_kwargs:
+        raise TypeError(
+            "extra keyword arguments pass through to "
+            "connection.send_command — they only apply when source is a "
+            "connection"
+        )
+    if isinstance(source, str):
+        return _compact_raw(source, command or "", platform, None, profile)
+    src = _sources.coerce(source)
+    if src is not None:
+        if src.raw:
+            return _compact_raw(
+                src.raw,
+                command or src.command,
+                platform or src.platform,
+                src.rows,
+                profile,
+            )
+        if src.rows is not None:
+            return optimize_parsed(src.rows, profile=profile)
+        return src.raw if src.raw is not None else ""
+    return optimize_parsed(source, profile=profile)
+
+
+def _compact_raw(
+    raw: str,
+    command: str,
+    platform: Optional[str],
+    rows: Optional[Any],
+    profile: str,
+) -> str:
+    """Both tiers over raw text: parse via the ntc front-end when the
+    source didn't bring rows of its own, render, smallest wins, raw
+    unchanged otherwise."""
+    if not raw:
+        return raw
+    if rows is None and command and platform:
+        from . import ntc as _ntc     # lazy: keeps the import graph acyclic
+        rows = _ntc.parse(raw, command=command, platform=platform)
+    candidates = render(
+        raw, command=command, platform=platform, parsed=rows, profile=profile
+    )
+    if not candidates:
+        return raw
+    return min(candidates, key=lambda c: len(c.text)).text
+
+
+def _parsed_baseline(parsed: Any) -> Optional[str]:
+    """The compact JSON a consumer would otherwise put in context — the
+    honest competitor when no raw text exists to gate against. ``None``
+    when *parsed* can't even be JSON-encoded (fail-open)."""
+    try:
+        return json.dumps(parsed, separators=(",", ":"), default=str)
+    except Exception:
+        return None
+
+
+def render_parsed(parsed: Any, *, profile: str = "default") -> list:
+    """Candidates for rows ALONE — no raw CLI text in hand.
+
+    Output that arrives already parsed (netmiko ``use_textfsm=True``,
+    scrapli ``textfsm_parse_output()``, API/gNMI payloads) has no raw
+    string for the usual shrink gate, so candidates are gated against
+    the compact JSON encoding of *parsed* instead — the representation a
+    consumer would otherwise send. An empty list means compact JSON is
+    already minimal (or the input isn't row-shaped): send that. Strings
+    yield no candidates — a parser falling back to raw text is raw-tier
+    business (:func:`render`/:func:`optimize`). Fail-open, like
+    everything else.
+    """
+    if parsed is None or isinstance(parsed, str):
+        return []
+    baseline = _parsed_baseline(parsed)
+    if baseline is None:
+        return []
+    try:
+        encoded = _parsed_tier.encode(parsed, _profile_key(profile))
+    except Exception:
+        logger.debug("neterse parsed-only tier failed, skipping", exc_info=True)
+        return []
+    return [
+        Candidate(
+            text=text,
+            method="parsed",
+            source=source,
+            dropped_fields=drops,
+            profile=applied,
+        )
+        for text, source, drops, applied in encoded
+        if isinstance(text, str) and 0 < len(text) < len(baseline)
+    ]
+
+
+def optimize_parsed(parsed: Any, *, profile: str = "default") -> str:
+    """Smallest faithful text for already-parsed output: the best
+    parsed-tier encoding, or the compact JSON of *parsed* when nothing
+    undercuts it. Strings return unchanged (netmiko's no-template
+    fallback hands back raw text — compact that with :func:`optimize`).
+    """
+    if isinstance(parsed, str):
+        return parsed
+    baseline = _parsed_baseline(parsed)
+    if baseline is None:
+        # Not JSON-encodable at all (circular refs, a value whose
+        # __str__ raises, absurd nesting depth): repr is the only
+        # faithful text left, and the object.__repr__ guard invokes no
+        # user code and cannot recurse — this path can never raise.
+        try:
+            return repr(parsed)
+        except Exception:
+            return object.__repr__(parsed)
+    best: Optional[Candidate] = None
+    for candidate in render_parsed(parsed, profile=profile):
+        if best is None or len(candidate.text) < len(best.text):
+            best = candidate
+    return best.text if best is not None else baseline
 
 
 def optimize(command: str, raw_output: str) -> str:

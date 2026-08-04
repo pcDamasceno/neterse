@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### One verb across runner libraries: `neterse.compact` (decision 32)
+
+- **`compact(source, command=None, *, platform=None, profile="default",
+  **run_kwargs)`** dispatches on the SHAPE of what you hand it, never on
+  the producing library: a **connection** (anything with `send_command`
+  — netmiko, scrapli, work-alikes; extra kwargs pass through to the
+  library call, the platform is read off the connection), a **response
+  object** (scrapli's `Response` ships in the box via `neterse.sources`
+  adapters — also covers nornir-style results), **raw text**
+  (`compact(raw, "show ip route", platform=...)`), or **structured
+  rows** (netmiko `use_textfsm=True`, NAPALM getters, gNMI — routed to
+  the rows-only path). One name across every library; a future response
+  object is one `neterse.sources.register_adapter()` call, never a new
+  API name.
+- **Platform spellings resolve the way the ecosystem writes them**:
+  `ntc.parse` walks a ladder verified against the real ntc-templates
+  index — transport suffix stripped first (`cisco_ios_ssh`), the
+  verbatim string second (ntc keys every WLC template on
+  `cisco_wlc_ssh` itself), known remaps last. The load-bearing remap is
+  netmiko's own `cisco_xe` → `cisco_ios` retry (raw ntc genuinely
+  rejects `cisco_xe`); `cisco_iosxe` → `cisco_ios` and `cisco_iosxr` →
+  `cisco_xr` are defensive — current ntc resolves those via CliTable's
+  regex platform matching, verified empirically.
+- The integration layer is **duck-typed and imports no runner library**
+  — the core stays zero-dependency, every failure path degrades toward
+  returning the device output unchanged, and the test suite pins the
+  contracts with fakes (no new test dependencies).
+
+### Rows-only compaction (decision 30)
+
+- **`neterse.render_parsed(rows)` / `neterse.optimize_parsed(rows)`** —
+  for output that arrives ALREADY parsed (netmiko `use_textfsm=True`,
+  scrapli `textfsm_parse_output()`, API/gNMI payloads) with no raw text
+  in hand. Candidates are gated against the compact JSON a consumer
+  would otherwise send (`json.dumps(rows, separators=(",", ":"),
+  default=str)`);
+  `optimize_parsed` returns the smallest of the two, so it never
+  enlarges. Strings pass through byte-identical — netmiko's no-template
+  fallback returns raw text, which belongs to `optimize`.
+
 ### YAML spec authoring (decisions 27–28) — the contribution surface
 
 - **Specs are now authored as YAML**, one file per command family under
