@@ -17,7 +17,7 @@ pinned against the pre-extraction baseline by the test suite.
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Shared helpers (used by code compressors AND the spec engine)
@@ -376,6 +376,156 @@ def _compress_portchannel_summary(raw: str) -> str:
     if len(rows) < 2:
         return raw
     return "\n".join(rows)
+
+
+# ---------------------------------------------------------------------------
+# show processes memory sorted (IOS/IOS-XE)
+# ---------------------------------------------------------------------------
+
+_PROCESS_MEMORY_ROW = re.compile(
+    r"^(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(.+)$"
+)
+_PROCESS_MEMORY_POOL = re.compile(r"^\s*\S(?:.*\s)?Pool Total:")
+
+
+def _compress_processes_memory_sorted(raw: str) -> str:
+    """Render every pool total and process row without alignment padding."""
+    pools: list = []
+    rows = ["pid,tty,allocated,freed,holding,getbufs,retbufs,process"]
+    for line in raw.splitlines():
+        if _PROCESS_MEMORY_POOL.match(line):
+            pools.append(line.strip())
+            continue
+        match = _PROCESS_MEMORY_ROW.match(line.strip())
+        if match:
+            rows.append(_csv_row(list(match.groups())))
+    if not pools or len(rows) < 2:
+        return raw
+    return "\n".join(pools + rows)
+
+
+# ---------------------------------------------------------------------------
+# show vrf / show ip route vrf * summary (IOS/IOS-XE)
+# ---------------------------------------------------------------------------
+
+_VRF_HEADER_WORDS = ["Name", "Default RD", "Protocols", "Interfaces"]
+
+
+def _compress_show_vrf(raw: str) -> str:
+    """Collapse wrapped interface rows into one lossless CSV row per VRF."""
+    lines = raw.splitlines()
+    positions, start = _header_positions(lines, _VRF_HEADER_WORDS)
+    if not positions:
+        return raw
+    bounds = positions + [10 ** 6]
+    records: list = []
+    current: Optional[list] = None
+    platform_records: list = []
+    platform_current: Optional[list] = None
+    platform_bounds: Optional[list] = None
+    for line in lines[start:]:
+        stripped = line.strip()
+        if not stripped or set(stripped) <= {"-"}:
+            continue
+        if stripped.startswith("Platform iVRF Name"):
+            platform_positions = [
+                line.find(word)
+                for word in ("Platform iVRF Name", "iVRF Id", "Interfaces")
+            ]
+            if platform_positions != sorted(platform_positions) or platform_positions[0] < 0:
+                return raw
+            platform_bounds = platform_positions + [10 ** 6]
+            continue
+        if platform_bounds is not None:
+            cols = [
+                line[platform_bounds[i]:platform_bounds[i + 1]].strip()
+                for i in range(3)
+            ]
+            if cols[0]:
+                if not cols[1]:
+                    return raw
+                platform_current = [cols[0], cols[1], []]
+                platform_records.append(platform_current)
+            elif platform_current is None or not cols[2]:
+                return raw
+            if platform_current is not None and cols[2]:
+                platform_current[2].append(cols[2])
+            continue
+        cols = [line[bounds[i]:bounds[i + 1]].strip() for i in range(len(positions))]
+        if cols[0]:
+            if not cols[1] or not cols[2]:
+                return raw
+            current = [cols[0], cols[1], cols[2], []]
+            records.append(current)
+        elif current is not None and cols[3]:
+            current[3].append(cols[3])
+        else:
+            return raw
+        if current is not None and cols[3] and not current[3]:
+            current[3].append(cols[3])
+    if not records:
+        return raw
+    out = ["name,default_rd,protocols,interfaces"]
+    for name, rd, protocols, interfaces in records:
+        out.append(_csv_row([name, rd, protocols, ";".join(interfaces)]))
+    if platform_records:
+        out.append("platform_ivrf_name,ivrf_id,interfaces")
+        for name, ivrf_id, interfaces in platform_records:
+            out.append(_csv_row([name, ivrf_id, ";".join(interfaces)]))
+    return "\n".join(out)
+
+
+_ROUTE_SUMMARY_NAME = re.compile(
+    r"^IP routing table name is (.+?) \((0x[0-9A-Fa-f]+)\)$"
+)
+_ROUTE_SUMMARY_MAX_PATHS = re.compile(r"^IP routing table maximum-paths is (\d+)$")
+_ROUTE_SUMMARY_HEADER = [
+    "Route Source", "Networks", "Subnets", "Replicates", "Overhead", "Memory (bytes)",
+]
+
+
+def _compress_ip_route_vrf_summary(raw: str) -> str:
+    """Render each complete per-VRF route-source summary as compact CSV."""
+    if "[TRUNCATED" in raw:
+        return raw
+    out: list = []
+    current_vrf: Optional[str] = None
+    positions: Optional[list] = None
+    row_count = 0
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        match = _ROUTE_SUMMARY_NAME.match(stripped)
+        if match:
+            current_vrf = match.group(1)
+            positions = None
+            out.append(f"vrf={current_vrf},id={match.group(2)}")
+            continue
+        match = _ROUTE_SUMMARY_MAX_PATHS.match(stripped)
+        if match and current_vrf:
+            out[-1] += f",max_paths={match.group(1)}"
+            continue
+        if all(word in line for word in _ROUTE_SUMMARY_HEADER):
+            positions = [line.find(word) for word in _ROUTE_SUMMARY_HEADER]
+            if positions != sorted(positions) or positions[0] < 0:
+                return raw
+            out.append("source,networks,subnets,replicates,overhead,memory_bytes")
+            continue
+        if current_vrf is None or positions is None:
+            return raw
+        if line[:1].isspace():
+            out.append("detail," + re.sub(r"\s+", " ", stripped))
+            continue
+        bounds = positions + [10 ** 6]
+        cols = [line[bounds[i]:bounds[i + 1]].strip() for i in range(len(positions))]
+        if not cols[0] or not any(cols[1:]):
+            return raw
+        out.append(_csv_row(cols))
+        row_count += 1
+    if row_count == 0:
+        return raw
+    return "\n".join(out)
 
 
 # ---- show ip protocols (IOS/IOS-XE) ---------------------------------------

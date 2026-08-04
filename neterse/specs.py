@@ -235,6 +235,29 @@ SPECS: list = [
         "context_prefixes": ["IP-EIGRP neighbors", "EIGRP-IPv4"],
         "dropped_fields": (),
     },
+    {
+        "id": "cisco_ios/show_processes_cpu_sorted",
+        "command": r"^show\s+processes\s+cpu\s+sorted(?:\s+\S+)?\s*$",
+        "platforms": r"ios|xe",
+        "strategy": "line_regex_table",
+        "row": (
+            r"^(\d+)\s+"             # PID
+            r"(\d+)\s+"              # runtime (ms)
+            r"(\d+)\s+"              # invocations
+            r"(\d+)\s+"              # usecs per invocation
+            r"([\d.]+%)\s+"          # 5 seconds
+            r"([\d.]+%)\s+"          # 1 minute
+            r"([\d.]+%)\s+"          # 5 minutes
+            r"(\d+)\s+"              # TTY
+            r"(.+)$"                  # process name
+        ),
+        "header": "pid,runtime_ms,invoked,usecs,cpu_5sec,cpu_1min,cpu_5min,tty,process",
+        "strip_columns": [9],
+        "context_prefixes": ["CPU utilization for five seconds:"],
+        "dropped_fields": (),
+        "doc": "show processes cpu sorted (IOS/IOS-XE) -> lossless CSV; "
+               "retains the aggregate utilization line and every process row.",
+    },
     # -----------------------------------------------------------------------
     # Phase-3 multi-vendor expansion. Fixtures live per-file under
     # tests/fixtures/<platform>/<family>/. These entries register AFTER the

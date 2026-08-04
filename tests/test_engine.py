@@ -27,7 +27,7 @@ def test_every_spec_builds_and_declares():
     """Specs must compile, use known strategies, and carry a manifest —
     a spec without ``dropped_fields`` would silently regress to
     'undeclared', losing exactly the vocabulary Phase 1 exists to add."""
-    assert len(SPECS) == 20
+    assert len(SPECS) == 21
     ids = [s["id"] for s in SPECS]
     assert len(ids) == len(set(ids)), "duplicate spec ids"
     for spec in SPECS:
@@ -63,13 +63,18 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
     # Post-baseline entries are vendor specs ("<vendor>/<family>") or the
     # declared post-baseline code compressors (block-shaped families no
     # table strategy fits — decision 26).
-    post_baseline_code = {"_compress_ip_protocols"}
+    post_baseline_code = {
+        "_compress_ip_protocols",
+        "_compress_processes_memory_sorted",
+        "_compress_show_vrf",
+        "_compress_ip_route_vrf_summary",
+    }
     assert all(
         n not in legacy and ("/" in n or n in post_baseline_code)
         for n in names[15:]
     ), "post-baseline entries must follow the legacy sequence"
-    assert sum(1 for n in names if n.startswith("spec:")) == 20
-    assert sum(1 for n in names if not n.startswith("spec:")) == 6
+    assert sum(1 for n in names if n.startswith("spec:")) == 21
+    assert sum(1 for n in names if not n.startswith("spec:")) == 9
 
 
 # ---------------------------------------------------------------------------

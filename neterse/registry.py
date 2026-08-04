@@ -136,6 +136,22 @@ REGISTRY: List[Entry] = [
         _c._compress_portchannel_summary,
         dropped_fields=(),
     ),
+    _spec_entry(_BY_ID["cisco_ios/show_processes_cpu_sorted"]),
+    _code_entry(
+        r"^show\s+processes\s+memory\s+sorted\s*$",
+        _c._compress_processes_memory_sorted,
+        dropped_fields=(),
+    ),
+    _code_entry(
+        r"^show\s+vrf\s*$",
+        _c._compress_show_vrf,
+        dropped_fields=(),
+    ),
+    _code_entry(
+        r"^show\s+ip\s+route\s+vrf\s+\S+\s+summary\s*$",
+        _c._compress_ip_route_vrf_summary,
+        dropped_fields=(),
+    ),
     # -- Phase-3 vendor expansion: strictly AFTER the legacy sequence, so
     #    equal-length ties keep resolving to the baseline entries.
     _spec_entry(_BY_ID["arista_eos/show_interfaces_status"]),
