@@ -2,27 +2,33 @@
 
 ## Unreleased
 
-### Runner integrations: netmiko & scrapli (decision 31)
+### One verb across runner libraries: `neterse.compact` (decision 32)
 
-- **`neterse.netmiko.send_command(conn, "show ...")`** — the netmiko
-  call itself is untouched (kwargs pass through); the result comes back
-  as the smallest faithful rendering. The connection's `device_type`
-  drives the raw-tier platform filter, and — with `neterse[textfsm]`
-  installed — keys the ntc-templates parse the way netmiko's own
-  `use_textfsm=True` actually resolves: suffix-stripped first, verbatim
-  second (WLC templates key on `cisco_wlc_ssh`), then the
-  `cisco_xe` → `cisco_ios` retry — so both tiers compete. A structured
-  result (`use_textfsm=True`) routes to the rows-only path
-  automatically; `neterse.netmiko.compact(output, ...)` does the same
-  for output already in hand.
-- **`neterse.scrapli.compact(response)`** (and the candidates-not-policy
-  `neterse.scrapli.render(response)`) — reads everything off the scrapli
-  `Response` itself: `result`, `channel_input`, `textfsm_platform`, and
-  `textfsm_parse_output()` when `scrapli[textfsm]` is available.
-- Both modules are **duck-typed and import neither library** — the core
-  stays zero-dependency, every failure path degrades toward returning
-  the device output unchanged, and the test suite pins the contracts
-  with fakes (no new test dependencies).
+- **`compact(source, command=None, *, platform=None, profile="default",
+  **run_kwargs)`** dispatches on the SHAPE of what you hand it, never on
+  the producing library: a **connection** (anything with `send_command`
+  — netmiko, scrapli, work-alikes; extra kwargs pass through to the
+  library call, the platform is read off the connection), a **response
+  object** (scrapli's `Response` ships in the box via `neterse.sources`
+  adapters — also covers nornir-style results), **raw text**
+  (`compact(raw, "show ip route", platform=...)`), or **structured
+  rows** (netmiko `use_textfsm=True`, NAPALM getters, gNMI — routed to
+  the rows-only path). One name across every library; a future response
+  object is one `neterse.sources.register_adapter()` call, never a new
+  API name.
+- **Platform spellings resolve the way the ecosystem writes them**:
+  `ntc.parse` walks a ladder verified against the real ntc-templates
+  index — transport suffix stripped first (`cisco_ios_ssh`), the
+  verbatim string second (ntc keys every WLC template on
+  `cisco_wlc_ssh` itself), known remaps last. The load-bearing remap is
+  netmiko's own `cisco_xe` → `cisco_ios` retry (raw ntc genuinely
+  rejects `cisco_xe`); `cisco_iosxe` → `cisco_ios` and `cisco_iosxr` →
+  `cisco_xr` are defensive — current ntc resolves those via CliTable's
+  regex platform matching, verified empirically.
+- The integration layer is **duck-typed and imports no runner library**
+  — the core stays zero-dependency, every failure path degrades toward
+  returning the device output unchanged, and the test suite pins the
+  contracts with fakes (no new test dependencies).
 
 ### Rows-only compaction (decision 30)
 

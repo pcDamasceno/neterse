@@ -13,23 +13,22 @@ mostly-zero tables, compression is the difference between a truncated tool
 result and a complete one.
 
 ```python
-from neterse import render, optimize
+from neterse import compact, render
+
+# The one verb — smallest faithful text for whatever you're holding:
+# a connection, a scrapli Response, raw text, or already-parsed rows
+# (with neterse[textfsm] installed, TextFSM parsing competes too):
+output = compact(conn, "show interface status")
+output = compact(raw, "show interface status", platform="cisco_nxos")
+output = compact(rows)
 
 # Full API — every candidate that shrinks the output; policy is yours:
 candidates = render(raw, command="show interface status", platform="cisco_nxos")
 best = min(candidates, key=lambda c: len(c.text), default=None)
 
-# Convenience wrapper — smallest candidate's text, or raw unchanged:
-compact = optimize("show interface status", raw)
-
 # Parsed tier — rows Genie/ntc-templates already produced, re-encoded
 # header-once (beats json.dumps(rows) by ~45-50% on multi-row output):
 candidates = render(raw, command="show ip int brief", parsed=rows)
-
-# Or let neterse drive the parser too (pip install neterse[textfsm]):
-# ntc-templates/TextFSM parses, both tiers compete, fail-open without it.
-from neterse import ntc
-compact = ntc.optimize("show ip int brief", raw, platform="cisco_ios")
 
 # Opt-in declared-lossy projection; the rendering itself says what was
 # withheld: "[omitted: name, vlan, ... — re-query profile=full]"
@@ -48,44 +47,41 @@ Eth1/11,RSRFF206 Twe1/0/3,connected,routed,full,10G,10Gbase-SR
 Eth1/45,RFRA3213-Eth1/48,connected,routed,full,10G,10Gbase-LR
 ```
 
-## Drop-in with netmiko and scrapli
+## One verb for netmiko, scrapli — and whatever comes next
 
-Already running commands with the libraries everyone uses? Compaction is
-one import away — neterse rides on top of the TextFSM parsing they
-already do, and never imports either library itself.
-
-```python
-# netmiko — same call shape, compact result (kwargs pass through):
-from netmiko import ConnectHandler
-from neterse.netmiko import send_command
-
-conn = ConnectHandler(device_type="cisco_ios", host="10.0.0.1", **credentials)
-output = send_command(conn, "show interface status")
-```
+`compact` dispatches on the **shape** of what you hand it, never on the
+producing library, so the call looks the same everywhere and neterse
+never imports any runner library:
 
 ```python
-# scrapli — hand over the Response; raw + TextFSM tiers compete:
-from scrapli.driver.core import IOSXEDriver
-from neterse.scrapli import compact
+from neterse import compact
 
-with IOSXEDriver(**device) as conn:
-    output = compact(conn.send_command("show interface status"))
-    # send_commands([...]) returns a MultiResponse — map over it:
-    outputs = [compact(r) for r in conn.send_commands(commands)]
+# a connection — netmiko, scrapli, any work-alike with send_command
+# (extra kwargs pass through to the library call):
+output = compact(conn, "show interface status")
+
+# a scrapli Response you already have:
+output = compact(response)
+
+# raw text from anywhere:
+output = compact(raw, "show ip route", platform="cisco_ios")
+
+# rows something already parsed — netmiko use_textfsm=True,
+# NAPALM getters, gNMI, plain dicts/lists:
+output = compact(rows)
 ```
 
-```python
-# Already parsed it yourself? (netmiko use_textfsm=True, scrapli
-# textfsm_parse_output(), any API/gNMI rows) — compact the structure:
-from neterse import optimize_parsed
+The raw and TextFSM-parsed tiers compete whenever parsing is possible
+(`pip install neterse[textfsm]`), and platform strings resolve the way
+the ecosystem actually spells them — netmiko `device_type`s
+(`cisco_ios_ssh`, `cisco_xe`), scrapli's `cisco_iosxe`, plain ntc names.
+Everything stays fail-open: no template, no extra, nothing shrinkable —
+you get the original back, byte-identical. scrapli's
+`send_commands([...])` returns a `MultiResponse` carrying no per-command
+info; map it: `[compact(r) for r in multi]`.
 
-rows = conn.send_command("show ip int brief", use_textfsm=True)
-output = optimize_parsed(rows)   # header-once CSV/TOON — never larger
-                                 # than the compact JSON of the rows
-```
-
-Everything stays fail-open: no template, no `textfsm` extra, an
-unshrinkable output — you get the original result back, byte-identical.
+A future library is a small source adapter
+(`neterse.sources.register_adapter`) — never a new API name.
 
 ## Install
 
@@ -165,7 +161,7 @@ uniform tables is on the roadmap.
 | 2 | Parsed tier: field projection + compact encoders (CSV/TOON) over pre-parsed rows; opt-in profiles with inline omission markers; `kv_extract` strategy | ✅ |
 | 3 | `neterse audit` coverage tool, fixture-per-file contribution flow, CI token-savings regression (pinned tokenizer), multi-vendor expansion (Arista EOS, Junos, Aruba AOS-CX, MikroTik), PyPI release machinery | ✅ |
 | 4 | Contributor scale-out: YAML spec authoring (one `specs/<vendor>/<family>.yaml` per family, compiled — never parsed — at runtime), registry self-append, `neterse[textfsm]` extra driving ntc-templates end-to-end | ✅ |
-| 5 | Runner integrations: `neterse.netmiko` / `neterse.scrapli` drop-ins (duck-typed, import nothing) + rows-only `render_parsed`/`optimize_parsed` for already-parsed output | ✅ |
+| 5 | Runner integration: the universal `compact()` verb (shape dispatch over connections / responses / raw / rows; source adapters for future libraries) + rows-only `render_parsed`/`optimize_parsed` for already-parsed output | ✅ |
 | 6 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
 | 7 | Beyond the CLI: the same candidates contract for MCP tool results, API responses, and generic JSON payloads | ▢ |
 

@@ -41,6 +41,59 @@ def _block_import(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# The platform-spelling ladder (decision 32: parser-side knowledge)
+# ---------------------------------------------------------------------------
+
+def test_platform_keys_resolve_ecosystem_spellings():
+    """Stripped first, verbatim second (ntc keys WLC templates on
+    cisco_wlc_ssh itself), known remaps last — netmiko device_types and
+    scrapli textfsm_platforms both resolve; ntc spellings stay single."""
+    assert ntc.platform_keys("cisco_ios") == ["cisco_ios"]
+    assert ntc.platform_keys("cisco_ios_ssh") == ["cisco_ios", "cisco_ios_ssh"]
+    assert ntc.platform_keys("cisco_ios_telnet") == [
+        "cisco_ios", "cisco_ios_telnet",
+    ]
+    assert ntc.platform_keys("cisco_wlc_ssh") == ["cisco_wlc", "cisco_wlc_ssh"]
+    assert ntc.platform_keys("cisco_xe") == ["cisco_xe", "cisco_ios"]
+    assert ntc.platform_keys("cisco_xe_ssh") == [
+        "cisco_xe", "cisco_xe_ssh", "cisco_ios",
+    ]
+    assert ntc.platform_keys("cisco_iosxe") == ["cisco_iosxe", "cisco_ios"]
+    assert ntc.platform_keys("cisco_iosxr") == ["cisco_iosxr", "cisco_xr"]
+    assert ntc.platform_keys("arista_eos") == ["arista_eos"]
+
+
+def test_parse_walks_the_ladder_until_a_key_resolves(monkeypatch):
+    tried = []
+
+    def fake(platform, command, data):
+        tried.append(platform)
+        if platform == "cisco_wlc_ssh":
+            return ROWS
+        raise Exception("No template found")
+
+    _install_fake(monkeypatch, fake)
+    assert ntc.parse("raw", command="show boot",
+                     platform="cisco_wlc_ssh") == ROWS
+    assert tried == ["cisco_wlc", "cisco_wlc_ssh"]
+
+
+def test_parse_cisco_xe_retries_as_cisco_ios_like_netmiko_does(monkeypatch):
+    tried = []
+
+    def fake(platform, command, data):
+        tried.append(platform)
+        if platform == "cisco_ios":
+            return ROWS
+        raise Exception("No template found")
+
+    _install_fake(monkeypatch, fake)
+    assert ntc.parse("raw", command="show ip arp",
+                     platform="cisco_xe") == ROWS
+    assert tried == ["cisco_xe", "cisco_ios"]
+
+
+# ---------------------------------------------------------------------------
 # parse()
 # ---------------------------------------------------------------------------
 

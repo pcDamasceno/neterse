@@ -1,7 +1,7 @@
 # neterse — design, topology, and plan
 
-*Status: Phase 5 shipped (netmiko/scrapli drop-ins, rows-only
-compaction); the PyPI publish itself awaits the
+*Status: Phase 5 shipped (the universal `compact()` verb, source
+adapters, rows-only compaction); the PyPI publish itself awaits the
 maintainer's tag (docs/RELEASING.md).
 This document is the project's source of truth for architecture and
 roadmap; decisions recorded here are binding until a new entry supersedes
@@ -48,8 +48,8 @@ faithful representation before it enters model context.
         │  │ command-independent; profile projections by field name.     ││
         │  │ ntc.py (extra: neterse[textfsm]) drives ntc-templates       ││
         │  │ itself: parse + render in one call, fail-open without it.   ││
-        │  │ netmiko.py / scrapli.py: duck-typed drop-ins for the two    ││
-        │  │ big runner libraries — one call, both tiers, fail-open      ││
+        │  │ compact(): ONE front door for conns/responses/raw/rows —    ││
+        │  │ sources.py adapters translate foreign response objects      ││
         │  └─────────────────────────────────────────────────────────────┘│
         │                                                                 │
         │  render() → [Candidate(text, method, source, dropped_fields,    │
@@ -91,11 +91,11 @@ neterse.ntc.parse(raw, *, command, platform) -> list[dict] | None
 neterse.ntc.render(raw, *, command, platform, profile="default")
 neterse.ntc.optimize(command, raw, *, platform) -> str
 
-# duck-typed runner drop-ins (import nothing) — decision 31:
-neterse.netmiko.send_command(conn, cmd, *, profile="default", **kw) -> str
-neterse.netmiko.compact(output, *, command, platform=None, profile="default")
-neterse.scrapli.compact(response, *, profile="default") -> str
-neterse.scrapli.render(response, *, profile="default") -> list[Candidate]
+# the universal front door — decision 32: ONE verb, dispatch on shape;
+# source = connection | response object | raw str | parsed rows:
+compact(source, command=None, *, platform=None, profile="default", **run_kw)
+    -> str
+neterse.sources.register_adapter(fn)   # future response objects plug in here
 ```
 
 * `platform`: skip-filter over declared platform
@@ -159,7 +159,7 @@ neterse.scrapli.render(response, *, profile="default") -> list[Candidate]
 | 2 | **Parsed tier**: `parsed=` accepts pre-parsed rows → field projection + compact encoders (`parsed:csv` beats `json.dumps(rows)` by ~45–50%; `parsed:toon` adds the explicit row count); opt-in `profile=` projections with inline omission markers (`updown` ships first); `kv_extract` strategy moved `show version` to a spec (10 specs + 5 code) | ✅ shipped |
 | 3 | **Community launch**: `neterse audit` coverage CLI + parity replay ports, fixture-per-file layout (`tests/fixtures/<platform>/<family>/`), CI token-savings regression (pinned `o200k_base`, committed baseline, 35% floor), 9 new families across Arista EOS / Junos / Aruba AOS-CX / MikroTik, release workflow via PyPI Trusted Publishing | ✅ shipped (0.1.0) — publish tag is a maintainer action ([RELEASING.md](RELEASING.md)) |
 | 4 | **Contributor scale-out**: YAML spec authoring — one `neterse/specs/<vendor>/<family>.yaml` per family, validated + compiled to the committed `_compiled.py` (decision 27, CI drift gate); registry self-append for unlisted specs (decision 28: a contribution is one YAML file + fixtures); `neterse.ntc` extra drives ntc-templates end-to-end (decision 29, `pip install neterse[textfsm]`) | ✅ shipped |
-| 5 | **Runner integrations**: `neterse.netmiko` (`send_command(conn, cmd)`) and `neterse.scrapli` (`compact(response)`) drop-ins — duck-typed, import nothing (decision 31); rows-only `render_parsed`/`optimize_parsed` gated against compact JSON for output that arrives already parsed (decision 30) | ✅ shipped |
+| 5 | **Runner integration**: the universal `compact(source, command=None, ...)` verb — shape dispatch over connections / response objects / raw text / parsed rows, with `neterse.sources` adapters as the extension point (decision 32, superseding decision 31's per-library modules); rows-only `render_parsed`/`optimize_parsed` gated against compact JSON (decision 30); the platform-spelling ladder in `ntc.parse` (netmiko `device_type`s, scrapli `textfsm_platform`s) | ✅ shipped |
 | 6 | Consumers swap any vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ◐ remaining: first PyPI publish, toon-format proposal |
 | 7 | **Beyond the CLI**: the same candidates contract for other verbose-payload surfaces an agent reads — MCP tool results, REST/API responses, generic JSON documents. The parsed tier is the seam (structured rows are already command-independent); what's new is dispatch keyed on something other than a CLI command string | ▢ design |
 
@@ -213,6 +213,7 @@ competes with the parser projects.
 | 29 | **`neterse.ntc`: optional ntc-templates front-end** (`pip install neterse[textfsm]`) | The parsed tier's thesis says the parsing ecosystems already did the per-command work — but the caller still had to run them. `neterse.ntc.parse/render/optimize` drive `ntc_templates.parse.parse_output` themselves (import is lazy, per call): with the extra installed, one call feeds TextFSM rows into `render(parsed=...)` and both tiers compete; without it — or when no template exists / the template doesn't match / the result isn't row-shaped — everything fails open to exactly the core behavior. The core package never imports it, so zero-dep holds; the tests fake the module rather than depend on it. |
 | 30 | **Rows-only entry points: `render_parsed`/`optimize_parsed`, gated against compact JSON** | The runner libraries hand back ALREADY-parsed structures (netmiko `use_textfsm=True`, scrapli `textfsm_parse_output()`), leaving no raw string for the usual shrink gate. The honest competitor is what a consumer would otherwise put in context: `json.dumps(rows, separators=(",", ":"), default=str)` (the `default=str` matters — parser rows legitimately carry datetimes and address objects). Candidates must strictly undercut it; when nothing does — or the input isn't row-shaped — `optimize_parsed` returns that compact JSON itself, so the API never enlarges and never loses. Strings pass through untouched: netmiko's no-template fallback returns raw text, and JSON-quoting it would corrupt the one input every user eventually feeds this API (compact raw text with `optimize`). Truly unencodable input (circular refs) falls back to `repr`, the only faithful text left. |
 | 31 | **Runner integrations are duck-typed and import nothing** | `neterse.netmiko` and `neterse.scrapli` read only the public attribute surface (`device_type` + `send_command`; `result`/`channel_input`/`textfsm_platform`/`textfsm_parse_output()`), so neither library is ever imported: zero-dep holds, the contract is testable with fakes instead of heavyweight dependencies, and any work-alike object is welcome. Platform flows from what the library already knows — netmiko's `device_type`, scrapli's `textfsm_platform` — feeding the raw-tier skip filter verbatim, while the netmiko-path ntc-templates keying tries what actually resolves: the suffix-stripped spelling first (`_ssh`/`_telnet`/`_serial` — strictly better than netmiko's own verbatim keying for telnet users), the verbatim `device_type` second (ntc-templates keys every WLC template on `cisco_wlc_ssh` itself), and netmiko's documented `cisco_xe` → `cisco_ios` retry last (ntc-templates ships zero `cisco_xe` templates). Every failure mode degrades stepwise: parsed tier drops out, then raw tier, then the device output returns unchanged. Verified against the real libraries locally (real ntc-templates parses of fixture captures; a real constructed `scrapli.response.Response`); CI stays on the fakes. |
+| 32 | **One verb: `compact(source, command=None, ...)` — shape dispatch; per-library modules retired before ever shipping** | Decision 31's `neterse.netmiko`/`neterse.scrapli` created one name per library — exactly the surface that cannot scale to NAPALM, nornir, or whatever comes next. The duck-typing rationale survives; the NAMES collapse into a single front door: strings are raw CLI text, list/dict structures are parsed rows, anything with `send_command` is a connection to run (extra kwargs pass through to the library call; misuse raises `TypeError` — there is no data to fail open with), and response objects are translated by small adapters (`neterse.sources`; the scrapli `Response` shape ships in the box, and `register_adapter` is the extension point — a future library is an adapter, never a new API name). Library knowledge migrated to the seams where it is generic: the platform-spelling ladder (transport-suffix strip, verbatim `cisco_wlc_ssh`, `cisco_xe`/`cisco_iosxe` → `cisco_ios`, `cisco_iosxr` → `cisco_xr`) moved into `ntc.parse` and is verified against the real ntc-templates index — the load-bearing remap is netmiko's own `cisco_xe` → `cisco_ios` retry (raw ntc genuinely rejects `cisco_xe`); the `iosxe`/`iosxr` remaps are defensive, since current ntc resolves those spellings itself via CliTable's regex platform matching (verified empirically). The compact() raw path also gives OUR ntc front-end a second chance whenever a response object's own parse yielded nothing. NAPALM needs no adapter at all: its getters return plain structures, which are already the rows path. Removed while unreleased — no deprecation debt. |
 
 ## Provenance
 

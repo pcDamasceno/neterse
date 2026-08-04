@@ -5,6 +5,12 @@ for LLM context.
 
 Public API:
 
+* :func:`compact` — the one verb: the smallest faithful text for
+  whatever a runner or parser handed you. Dispatches on the SHAPE of
+  its argument (a connection, a response object, raw text, parsed
+  rows), never on the producing library — netmiko, scrapli, NAPALM
+  getters and future libraries all enter here (decision 32; foreign
+  response objects plug in via :mod:`neterse.sources`).
 * :func:`render` — produce every shrinking :class:`Candidate` for a
   command's output. The library never picks a winner; policy (e.g.
   "smallest wins"), metrics, and caching belong to the consumer.
@@ -70,6 +76,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple
 
 from . import parsed as _parsed_tier
+from . import sources as _sources
 from .registry import (  # noqa: F401  (re-exported)
     Entry,
     REGISTRY,
@@ -83,6 +90,7 @@ __version__ = "0.1.0"
 __all__ = [
     "Candidate",
     "Entry",
+    "compact",
     "iter_compressors",
     "iter_entries",
     "optimize",
@@ -204,6 +212,100 @@ def render(
                     )
                 )
     return candidates
+
+
+def compact(
+    source: Any,
+    command: Optional[str] = None,
+    *,
+    platform: Optional[str] = None,
+    profile: str = "default",
+    **run_kwargs: Any,
+) -> str:
+    """The one verb: the smallest faithful text for whatever a runner or
+    parser handed you — library-independent by design (decision 32).
+    Dispatch is on the SHAPE of *source*, never on its library:
+
+    * a **connection** — anything with ``send_command`` (netmiko,
+      scrapli, a work-alike): runs *command* (extra keyword arguments
+      pass through to the library call) and compacts what comes back.
+      The platform is read off the connection (netmiko ``device_type``,
+      scrapli ``textfsm_platform``) unless given.
+    * a **response object** — anything an adapter recognizes (scrapli's
+      ``Response`` ships in the box; see :mod:`neterse.sources`): raw
+      text, command, platform and pre-parsed rows all come off the
+      object; explicit arguments override what it carries.
+    * a **raw string**: the classic path — *command* names it, and with
+      the ``textfsm`` extra installed ntc-templates parses it so both
+      tiers compete.
+    * **structured rows** — netmiko ``use_textfsm=True``, NAPALM
+      getters, gNMI, plain dicts/lists: re-encoded header-once against
+      their compact-JSON baseline (:func:`optimize_parsed`).
+
+    Fail-open like everything else: whatever cannot shrink comes back
+    unchanged, and no data path raises. (Misuse is different — a
+    connection without *command*, or run kwargs without a connection,
+    is a ``TypeError``: there is no data to fail open with.)
+    """
+    if callable(getattr(source, "send_command", None)):
+        if not command:
+            raise TypeError(
+                "compact(connection, ...) needs the command to run, e.g. "
+                'compact(conn, "show ip interface brief")'
+            )
+        output = source.send_command(command, **run_kwargs)
+        if platform is None:
+            for attr in ("device_type", "textfsm_platform"):
+                value = getattr(source, attr, None)
+                if isinstance(value, str) and value:
+                    platform = value
+                    break
+        return compact(output, command, platform=platform, profile=profile)
+    if run_kwargs:
+        raise TypeError(
+            "extra keyword arguments pass through to "
+            "connection.send_command — they only apply when source is a "
+            "connection"
+        )
+    if isinstance(source, str):
+        return _compact_raw(source, command or "", platform, None, profile)
+    src = _sources.coerce(source)
+    if src is not None:
+        if src.raw:
+            return _compact_raw(
+                src.raw,
+                command or src.command,
+                platform or src.platform,
+                src.rows,
+                profile,
+            )
+        if src.rows is not None:
+            return optimize_parsed(src.rows, profile=profile)
+        return src.raw if src.raw is not None else ""
+    return optimize_parsed(source, profile=profile)
+
+
+def _compact_raw(
+    raw: str,
+    command: str,
+    platform: Optional[str],
+    rows: Optional[Any],
+    profile: str,
+) -> str:
+    """Both tiers over raw text: parse via the ntc front-end when the
+    source didn't bring rows of its own, render, smallest wins, raw
+    unchanged otherwise."""
+    if not raw:
+        return raw
+    if rows is None and command and platform:
+        from . import ntc as _ntc     # lazy: keeps the import graph acyclic
+        rows = _ntc.parse(raw, command=command, platform=platform)
+    candidates = render(
+        raw, command=command, platform=platform, parsed=rows, profile=profile
+    )
+    if not candidates:
+        return raw
+    return min(candidates, key=lambda c: len(c.text)).text
 
 
 def _parsed_baseline(parsed: Any) -> Optional[str]:
