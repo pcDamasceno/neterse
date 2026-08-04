@@ -43,6 +43,28 @@ def _csv_row(fields: list) -> str:
     return ",".join(out)
 
 
+def _header_positions(lines: list, keywords: list) -> "Tuple[Optional[list], int]":
+    """Locate the header line containing every keyword at strictly
+    increasing offsets; return (column start offsets, index of the first
+    data line). ``(None, 0)`` when no such header exists."""
+    for i, line in enumerate(lines):
+        if not all(kw in line for kw in keywords):
+            continue
+        pos: list = []
+        last = -1
+        ok = True
+        for kw in keywords:
+            p = line.find(kw)
+            if p <= last:
+                ok = False
+                break
+            pos.append(p)
+            last = p
+        if ok:
+            return pos, i + 1
+    return None, 0
+
+
 def _fixed_width_rows(raw: str, keywords: list, name_re: Optional[re.Pattern] = None) -> Optional[list]:
     """Parse a fixed-width table whose columns start at the ``keywords`` header.
 
@@ -59,25 +81,7 @@ def _fixed_width_rows(raw: str, keywords: list, name_re: Optional[re.Pattern] = 
     if name_re is None:
         name_re = _IFACE_NAME_RE
     lines = raw.splitlines()
-    positions: Optional[list] = None
-    start = 0
-    for i, line in enumerate(lines):
-        if not all(kw in line for kw in keywords):
-            continue
-        pos: list = []
-        last = -1
-        ok = True
-        for kw in keywords:
-            p = line.find(kw)
-            if p <= last:
-                ok = False
-                break
-            pos.append(p)
-            last = p
-        if ok:
-            positions = pos
-            start = i + 1
-            break
+    positions, start = _header_positions(lines, keywords)
     if not positions:
         return None
     bounds = positions + [10 ** 6]
@@ -89,6 +93,44 @@ def _fixed_width_rows(raw: str, keywords: list, name_re: Optional[re.Pattern] = 
         if not head or not name_re.match(head[0]):
             continue
         rows.append([line[bounds[k]:bounds[k + 1]].strip() for k in range(len(positions))])
+    return rows
+
+
+def _wrapped_first_col_rows(raw: str, keywords: list, name_re: re.Pattern) -> Optional[list]:
+    """``_fixed_width_rows`` for tables whose FIRST column value may
+    overflow its width and wrap onto its own line — classic IOS
+    ``show cdp neighbors``: a long device ID prints alone and the
+    remaining columns follow on the next line with the first column
+    blank. A single-token line matching *name_re* is held as the pending
+    first-column value; the next row with an empty first column consumes
+    it. Legend/summary lines (spaces inside the first column slice) and
+    lines with nothing in the remaining columns are skipped. Returns
+    ``None`` when the header is absent (caller falls back to raw).
+    """
+    lines = raw.splitlines()
+    positions, start = _header_positions(lines, keywords)
+    if not positions:
+        return None
+    bounds = positions + [10 ** 6]
+    rows: list = []
+    pending: Optional[str] = None
+    for line in lines[start:]:
+        stripped = line.strip()
+        if not stripped or set(stripped) <= {"-"}:
+            continue
+        if " " not in stripped and name_re.match(stripped):
+            pending = stripped        # wrapped first column; columns follow
+            continue
+        cols = [line[bounds[k]:bounds[k + 1]].strip() for k in range(len(positions))]
+        if not any(cols[1:]):
+            continue
+        if not cols[0]:
+            if pending is None:
+                continue
+            cols[0], pending = pending, None
+        elif not name_re.match(cols[0]):
+            continue
+        rows.append(cols)
     return rows
 
 

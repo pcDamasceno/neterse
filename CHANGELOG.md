@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **IOS `show cdp neighbors` covered (decision 25).** The legacy
+  cdp/lldp entry expects single-token row values and fails open on real
+  IOS output (`Eth 0/2`, `Linux Uni` — bgp_fundamentals lab, 547–623
+  chars/call straight to the model). New `cisco_ios/show_cdp_neighbors`
+  fixed-width spec parses it (58% fewer chars, holdtime kept, legend +
+  derivable entry-count dropped), with engine support for IOS's
+  wrapped-device-ID lines (`first_col_wraps`). The legacy entry gains
+  `unindented_rows_only`: its stripped-line matching let indented
+  continuation/counter lines false-match into corrupt rows that could
+  WIN smallest-wins — on-format output is unchanged (pinned by golden),
+  off-format garbage is parity-exempt via `INTENTIONAL_DIVERGENCES`.
+
 ## 0.4.0 — Phase 3: community launch
 
 **Renamed to `neterse`** ("network terse") before first publish —
