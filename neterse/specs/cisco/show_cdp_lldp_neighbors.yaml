@@ -1,0 +1,18 @@
+# show cdp/lldp neighbors (single-token rows, NX-OS-shaped) -> CSV.
+#
+# Data rows start at column 0 on every platform this entry knows;
+# without this guard the stripped IOS *continuation* line of a wrapped
+# device ID ("<spaces>Eth 0/0  165  R ...") false-matches the row regex
+# and yields a corrupt row that can WIN smallest-wins over the faithful
+# fixed-width entry (decision 25). The IOS fixed-width table lives in
+# cisco_ios/show_cdp_neighbors.yaml.
+command: 'show\s+(?:cdp|lldp)\s+neigh'
+platforms: 'ios|xe|xr|nx'
+strategy: line_regex_table
+unindented_rows_only: true
+#      1: device ID   2: local intf   (skip holdtime)   3: capability
+#      4: platform    5: port ID
+row: '^(\S+)\s+(\S+)\s+\d+\s+(\S.*\S)\s+(\S+)\s+(\S+)\s*$'
+header: device,local_intf,capability,platform,remote_port
+strip_columns: [3]
+dropped_fields: [holdtime]

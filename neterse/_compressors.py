@@ -1,7 +1,8 @@
 """Hand-written compressors — the code tier of the registry.
 
 Since Phase 1, table-shaped command families live as declarative specs
-(``specs.py``) compiled by the engine — and since Phase 2 the same is
+(the YAML-authored ``specs/`` package) compiled by the engine — and
+since Phase 2 the same is
 true of ``show version``-style field scans (``kv_extract``). What remains
 here is the small set of genuinely stateful formats a flat spec cannot
 express faithfully — multi-line interface-detail blocks (NX-OS splits

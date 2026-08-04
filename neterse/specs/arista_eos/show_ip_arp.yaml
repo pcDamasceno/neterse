@@ -1,0 +1,9 @@
+# show ip arp (Arista EOS) -> CSV.
+command: 'show\s+ip\s+arp'
+platforms: 'eos|arista'
+strategy: line_regex_table
+#      1: address   2: age   3: MAC   4: interface(s)
+row: '^(\d+\.\d+\.\d+\.\d+)\s+([\d:]+)\s+([0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\.[0-9a-fA-F]{4})\s+(.+)$'
+header: address,age,mac,interface
+strip_columns: [4]
+dropped_fields: []

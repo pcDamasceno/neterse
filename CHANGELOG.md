@@ -1,5 +1,49 @@
 # Changelog
 
+## Unreleased
+
+### YAML spec authoring (decisions 27–28) — the contribution surface
+
+- **Specs are now authored as YAML**, one file per command family under
+  `neterse/specs/<vendor>/<family>.yaml` — the vendor/command layout
+  ntc-templates made familiar. The spec's id is the path; regexes stay
+  byte-for-byte what the dict tier declared, with the design notes
+  preserved as YAML comments.
+- **`scripts/compile_specs.py`** validates every source loudly (regexes
+  must compile, header arity must match captured groups / keywords,
+  profiles must project real columns, the `dropped_fields` manifest is
+  mandatory, unknown keys are rejected) and generates the committed
+  `neterse/specs/_compiled.py` the runtime imports — YAML never becomes
+  a runtime dependency, preserving the zero-dep invariant. CI and the
+  test suite both fail on drift between sources and the generated
+  module (`compile_specs.py --check`).
+- **No registry edit per contribution**: specs without an explicit
+  position in the canonical order self-append after the full sequence in
+  sorted-id order, so tie-breaks still resolve to the frozen baseline
+  entries. A new command family is one YAML file plus two fixture files.
+- Migration held byte-parity: the compiled dicts are deep-equal to the
+  retired `specs.py` — sole exception: `show_ip_route`'s VERBOSE row,
+  reformatted as a block scalar (whitespace and comment layout a VERBOSE
+  pattern ignores; decision 27) — and the full parity cross-matrix is
+  unchanged.
+
+### ntc-templates front-end (decision 29)
+
+- **`neterse.ntc`** — `pip install neterse[textfsm]` — drives
+  ntc-templates/TextFSM itself: `ntc.parse(raw, command=..., platform=...)`
+  returns the parsed rows (or `None`, fail-open), and
+  `ntc.render`/`ntc.optimize` feed them straight into the parsed tier so
+  one call covers both tiers across every template the community
+  maintains. Without the extra — or when no template matches — behavior
+  is byte-identical to the core API. The core never imports it.
+
+### Packaging
+
+- The `test` extra gains PyYAML (authoring/drift tooling only); the new
+  `textfsm` extra pulls ntc-templates. Runtime dependencies remain zero,
+  still enforced in CI. The YAML sources ship as package data for
+  reference; the compiled module is what imports.
+
 ## 0.1.0 — first release
 
 First public release: minimum-token renderings of network CLI output for

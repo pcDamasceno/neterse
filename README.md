@@ -26,6 +26,11 @@ compact = optimize("show interface status", raw)
 # header-once (beats json.dumps(rows) by ~45-50% on multi-row output):
 candidates = render(raw, command="show ip int brief", parsed=rows)
 
+# Or let neterse drive the parser too (pip install neterse[textfsm]):
+# ntc-templates/TextFSM parses, both tiers compete, fail-open without it.
+from neterse import ntc
+compact = ntc.optimize("show ip int brief", raw, platform="cisco_ios")
+
 # Opt-in declared-lossy projection; the rendering itself says what was
 # withheld: "[omitted: name, vlan, ... — re-query profile=full]"
 candidates = render(raw, command="show interface status", profile="updown")
@@ -46,7 +51,8 @@ Eth1/45,RFRA3213-Eth1/48,connected,routed,full,10G,10Gbase-LR
 ## Install
 
 ```bash
-pip install neterse        # import name: neterse
+pip install neterse                # zero dependencies, import name: neterse
+pip install "neterse[textfsm]"     # + ntc-templates: parse & compress in one call
 ```
 
 > Named **neterse** ("network terse") because the natural name `terse` is
@@ -56,13 +62,17 @@ pip install neterse        # import name: neterse
 ## Design in one paragraph
 
 Two tiers, one contract. The **raw-text tier** compresses CLI output
-directly — declarative specs drive generic strategies (fixed-width
-table → CSV, line-regex table → CSV, key-value scan), with plain-Python
-compressors as the escape hatch for genuinely stateful formats. The
-**parsed tier** re-encodes rows that Genie / ntc-templates / TTP / NAPALM
-already parsed into compact header-once form (`render(..., parsed=rows)`
-→ CSV and TOON-style candidates that undercut `json.dumps(rows)` by
-~45–50%). Opt-in **profiles** (`profile="updown"`) narrow output to a
+directly — declarative specs, authored as one YAML file per
+vendor/command (`neterse/specs/<vendor>/<family>.yaml`, compiled to
+plain dicts so the runtime stays dependency-free), drive generic
+strategies (fixed-width table → CSV, line-regex table → CSV, key-value
+scan), with plain-Python compressors as the escape hatch for genuinely
+stateful formats. The **parsed tier** re-encodes rows that Genie /
+ntc-templates / TTP / NAPALM already parsed into compact header-once
+form (`render(..., parsed=rows)` → CSV and TOON-style candidates that
+undercut `json.dumps(rows)` by ~45–50%) — and the optional
+`neterse.ntc` front-end (`pip install neterse[textfsm]`) runs
+ntc-templates for you, so one call covers both tiers. Opt-in **profiles** (`profile="updown"`) narrow output to a
 declared projection and say so inline
 (`[omitted: … — re-query profile=full]`). Both tiers emit `Candidate`s;
 the library **never picks a winner** — smallest-wins, ledgers, metrics,
@@ -115,7 +125,9 @@ uniform tables is on the roadmap.
 | 1 | Spec engine (generic strategies over declarative specs), platform-keyed dispatch, declared-lossiness manifests | ✅ |
 | 2 | Parsed tier: field projection + compact encoders (CSV/TOON) over pre-parsed rows; opt-in profiles with inline omission markers; `kv_extract` strategy | ✅ |
 | 3 | `neterse audit` coverage tool, fixture-per-file contribution flow, CI token-savings regression (pinned tokenizer), multi-vendor expansion (Arista EOS, Junos, Aruba AOS-CX, MikroTik), PyPI release machinery | ✅ |
-| 4 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
+| 4 | Contributor scale-out: YAML spec authoring (one `specs/<vendor>/<family>.yaml` per family, compiled — never parsed — at runtime), registry self-append, `neterse[textfsm]` extra driving ntc-templates end-to-end | ✅ |
+| 5 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
+| 6 | Beyond the CLI: the same candidates contract for MCP tool results, API responses, and generic JSON payloads | ▢ |
 
 ## Coverage
 
@@ -142,11 +154,14 @@ specs worth contributing.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: most new command
-families are **a spec dict plus two fixture files**
-(`tests/fixtures/<platform>/<family>/{commands.txt,raw.txt}`) — no parser
-code, and the suite auto-covers anything dropped there. The escape hatch
-for stateful formats is a plain function under the same fail-open
-contract.
+families are **one YAML spec file plus two fixture files** —
+`neterse/specs/<platform>/<family>.yaml` (the vendor/command layout
+ntc-templates made familiar) and
+`tests/fixtures/<platform>/<family>/{commands.txt,raw.txt}` — no parser
+code, no registry edit, and the suite auto-covers anything dropped
+there. `python scripts/compile_specs.py` validates the spec loudly and
+regenerates the zero-dependency runtime module. The escape hatch for
+stateful formats is a plain function under the same fail-open contract.
 
 ## License
 

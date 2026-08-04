@@ -1,0 +1,17 @@
+# show interfaces terse (Junos) -> CSV; local + remote merge into the
+# address column.
+command: '^show\s+int(?:erfaces?)?\s+terse(?:\s+\S+)?\s*$'
+platforms: 'junos|juniper'
+strategy: line_regex_table
+#      1: interface/unit   2: admin   3: link
+#      4: proto (inet, inet6, eth-switch, ...)   5: local [+ remote]
+row: '^(\S+)\s+(up|down)\s+(up|down)(?:\s+(\S+))?(?:\s+(.+))?$'
+header: interface,admin,link,proto,address
+strip_columns: [5]
+dropped_fields: []
+profiles:
+  updown:
+    keep: [interface, admin, link]
+doc: >-
+  show interfaces terse (Junos) -> CSV; local+remote merge into the
+  address column.

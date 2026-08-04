@@ -1,0 +1,16 @@
+# show interface status (NX-OS / Catalyst) -> CSV via fixed-width
+# offsets: the Name column carries spaces, so a whitespace split would
+# corrupt it. Data rows are recognized by the shared Cisco-family
+# interface-name pattern (the strategy default).
+command: '^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+status\s*$'
+platforms: 'ios|xe|nx'
+strategy: fixed_width_table
+keywords: [Port, Name, Status, Vlan, Duplex, Speed, Type]
+header: port,name,status,vlan,duplex,speed,type
+dropped_fields: []
+profiles:
+  updown:
+    keep: [port, status]
+doc: >-
+  show interface status (NX-OS / Catalyst) -> CSV; drops the repeated
+  dashed separators and per-block column headers.

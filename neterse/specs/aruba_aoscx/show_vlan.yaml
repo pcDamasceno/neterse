@@ -1,0 +1,13 @@
+# show vlan (Aruba AOS-CX) -> CSV.
+#
+# AOS-CX status is up/down (the Arista/Cisco family says `active`),
+# which keeps the two bare-`show vlan` specs from cross-parsing.
+command: '^show\s+vlan\s*$'
+platforms: 'aruba|aoscx|aos_cx|procurve'
+strategy: line_regex_table
+#      1: VLAN ID   2: name   3: status   4: reason   5: type
+#      6: interfaces
+row: '^(\d+)\s+(\S+)\s+(up|down)\s+(\S+)\s+(\S+)\s*(.*)?$'
+header: vlan,name,status,reason,type,interfaces
+strip_columns: [6]
+dropped_fields: []

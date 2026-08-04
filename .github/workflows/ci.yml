@@ -28,6 +28,8 @@ jobs:
           assert not runtime, f"runtime deps crept in: {runtime}"
           print("zero runtime dependencies: OK")
           EOF
+      - name: Spec drift gate (YAML sources ↔ generated _compiled.py)
+        run: python scripts/compile_specs.py --check
       - name: Tests (behavioral + byte-parity vs frozen baseline)
         run: pytest
 

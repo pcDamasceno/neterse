@@ -1,0 +1,30 @@
+# show version -> one key=value line (kv_extract, Phase 2).
+#
+# Field order is the scan order per line; OUTPUT order is the order
+# fields first match top-to-bottom (byte-parity with the historical
+# hand-written compressor). Patterns are byte-for-byte the legacy ones.
+command: 'show\s+version'
+platforms: 'ios|xe|xr|nx'
+strategy: kv_extract
+fields:
+  - key: os
+    pattern: 'Cisco\s+(IOS|NX-OS|IOS-XE|IOS XR)\s+Software.*Version\s+(\S+)'
+    flags: [IGNORECASE]
+    template: '{1} {2}'
+  - key: uptime
+    pattern: 'uptime is\s+(.+)'
+    flags: [IGNORECASE]
+    strip: true
+  - key: memory
+    pattern: '(\d+[KMG])\s+bytes of (?:physical\s+)?memory'
+    flags: [IGNORECASE]
+  - key: serial
+    pattern: '[Pp]rocessor\s+board\s+ID\s+(\S+)'
+  - key: model
+    pattern: '[Mm]odel\s+number\s*:\s*(\S+)'
+  - key: image
+    pattern: '[Ss]ystem\s+image\s+file\s+is\s+\"([^\"]+)\"'
+dropped_fields: [unmatched_lines]
+doc: >-
+  show version -> one key=value line (os, uptime, memory, serial, model,
+  image); everything unmatched is dropped.

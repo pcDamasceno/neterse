@@ -1,6 +1,7 @@
 # neterse — design, topology, and plan
 
-*Status: Phase 3 shipped (0.1.0); the PyPI publish itself awaits the
+*Status: Phase 4 shipped (YAML spec authoring, registry self-append,
+`neterse.ntc`); the PyPI publish itself awaits the
 maintainer's tag (docs/RELEASING.md).
 This document is the project's source of truth for architecture and
 roadmap; decisions recorded here are binding until a new entry supersedes
@@ -29,19 +30,24 @@ faithful representation before it enters model context.
         │    (command pattern, fn, platform scope?, dropped_fields?)      │
         │                                                                 │
         │  ┌── data tier ─────────────────┐  ┌── code tier ─────────────┐ │
-        │  │ specs.py: plain-dict specs   │  │ _compressors.py: hand-   │ │
-        │  │ engine.py: generic           │  │ written functions for    │ │
-        │  │ strategies compile specs     │  │ genuinely stateful       │ │
-        │  │ into compressors             │  │ formats (multi-line      │ │
-        │  │  · line_regex_table          │  │ blocks, banner state     │ │
-        │  │  · fixed_width_table         │  │ machines, multi-table    │ │
-        │  │  · kv_extract                │  │ zero-row suppression)    │ │
+        │  │ specs/<vendor>/<family>.yaml │  │ _compressors.py: hand-   │ │
+        │  │ (authoring) → compiled by    │  │ written functions for    │ │
+        │  │ scripts/compile_specs.py     │  │ genuinely stateful       │ │
+        │  │ into specs/_compiled.py      │  │ formats (multi-line      │ │
+        │  │ engine.py: generic           │  │ blocks, banner state     │ │
+        │  │ strategies compile specs     │  │ machines, multi-table    │ │
+        │  │ into compressors             │  │ zero-row suppression)    │ │
+        │  │  · line_regex_table          │  │                          │ │
+        │  │  · fixed_width_table         │  │                          │ │
+        │  │  · kv_extract                │  │                          │ │
         │  │  + named profile projections │  │                          │ │
         │  └──────────────────────────────┘  └──────────────────────────┘ │
         │  ┌── parsed tier ──────────────────────────────────────────────┐│
         │  │ parsed.py: rows Genie/ntc-templates/TTP/NAPALM already      ││
         │  │ produced → header-once encoders (parsed:csv, parsed:toon);  ││
-        │  │ command-independent; profile projections by field name      ││
+        │  │ command-independent; profile projections by field name.     ││
+        │  │ ntc.py (extra: neterse[textfsm]) drives ntc-templates       ││
+        │  │ itself: parse + render in one call, fail-open without it    ││
         │  └─────────────────────────────────────────────────────────────┘│
         │                                                                 │
         │  render() → [Candidate(text, method, source, dropped_fields,    │
@@ -57,7 +63,8 @@ faithful representation before it enters model context.
 ```
 
 Two tiers, one contract. The **data tier** scales by contribution — a new
-table-shaped command family is a spec dict plus fixtures, no parser code.
+table-shaped command family is one YAML spec file plus fixtures, no
+parser code and no registry edit.
 The **code tier** is the honest escape hatch: some formats (NX-OS splits
 interface state across two lines; banners need a skip-until-sentinel state
 machine) cannot be expressed by a flat spec without inventing a bad
@@ -72,6 +79,11 @@ render(raw, *, command, platform=None, parsed=None, profile="default")
 optimize(command, raw) -> str          # == min(render(...)) or raw
 register(pattern, *, platforms=None, dropped_fields=None)   # plugin hatch
 iter_compressors() / iter_entries()    # registry views
+
+# optional extra (pip install neterse[textfsm]) — decision 29:
+neterse.ntc.parse(raw, *, command, platform) -> list[dict] | None
+neterse.ntc.render(raw, *, command, platform, profile="default")
+neterse.ntc.optimize(command, raw, *, platform) -> str
 ```
 
 * `platform`: skip-filter over declared platform
@@ -101,10 +113,12 @@ iter_compressors() / iter_entries()    # registry views
    non-shrinking result → no candidate. Raw is never lost, output never
    enlarged. Enforced in `render()`, re-tested per compressor.
 2. **Zero runtime dependencies.** Stdlib only; CI asserts the installed
-   dist metadata carries no runtime requirements. This is why specs are
-   plain dicts — no YAML/TOML parser at runtime. An optional authoring
-   front-end (YAML → dict) may land later as an extra, feeding the same
-   engine.
+   dist metadata carries no runtime requirements. Specs are AUTHORED as
+   YAML (`neterse/specs/<vendor>/<family>.yaml`) but COMPILED at
+   development time into the generated, committed
+   `specs/_compiled.py` the runtime imports — no YAML parser at import
+   time, ever (decision 27; PyYAML lives in the `test` extra,
+   ntc-templates in the `textfsm` extra).
 3. **Candidates, not policy.** Winner selection, savings ledgers,
    metrics, caching, and delta re-query logic belong to consumers (a
    consumer keeps its own smallest-wins seam, metrics counters, and
@@ -132,7 +146,9 @@ iter_compressors() / iter_entries()    # registry views
 | 1 | Spec engine (generic strategies over dict specs); 9/15 families converted; platform-keyed dispatch; lossiness manifests on every entry | ✅ shipped |
 | 2 | **Parsed tier**: `parsed=` accepts pre-parsed rows → field projection + compact encoders (`parsed:csv` beats `json.dumps(rows)` by ~45–50%; `parsed:toon` adds the explicit row count); opt-in `profile=` projections with inline omission markers (`updown` ships first); `kv_extract` strategy moved `show version` to a spec (10 specs + 5 code) | ✅ shipped |
 | 3 | **Community launch**: `neterse audit` coverage CLI + parity replay ports, fixture-per-file layout (`tests/fixtures/<platform>/<family>/`), CI token-savings regression (pinned `o200k_base`, committed baseline, 35% floor), 9 new families across Arista EOS / Junos / Aruba AOS-CX / MikroTik, release workflow via PyPI Trusted Publishing | ✅ shipped (0.1.0) — publish tag is a maintainer action ([RELEASING.md](RELEASING.md)) |
-| 4 | Consumers swap any vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ◐ remaining: first PyPI publish, toon-format proposal |
+| 4 | **Contributor scale-out**: YAML spec authoring — one `neterse/specs/<vendor>/<family>.yaml` per family, validated + compiled to the committed `_compiled.py` (decision 27, CI drift gate); registry self-append for unlisted specs (decision 28: a contribution is one YAML file + fixtures); `neterse.ntc` extra drives ntc-templates end-to-end (decision 29, `pip install neterse[textfsm]`) | ✅ shipped |
+| 5 | Consumers swap any vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ◐ remaining: first PyPI publish, toon-format proposal |
+| 6 | **Beyond the CLI**: the same candidates contract for other verbose-payload surfaces an agent reads — MCP tool results, REST/API responses, generic JSON documents. The parsed tier is the seam (structured rows are already command-independent); what's new is dispatch keyed on something other than a CLI command string | ▢ design |
 
 The Phase-2 acceptance rule — beat `json.dumps(rows)` on multi-row output
 or don't ship the tier — is pinned permanently in `tests/test_parsed.py`.
@@ -179,6 +195,9 @@ competes with the parser projects.
 | 24 | **Baseline change** — `cisco/show_ip_bgp_summary` reads the real AS column | BGP-lab verification (r1–r3, 2026-08-03): the legacy regex captured the first number after the neighbor IP — the V column (BGP version, constant 4) — under the `as` header, silently dropping the real AS; on the lab, the eBGP neighbor (AS 100) was indistinguishable from the iBGP ones (AS 200), and the legacy fixture itself proves it (AS 65001 and 65002 both rendered `4`). The regex now skips V and captures AS; `version` joins the declared drops. Parity-exempt via `INTENTIONAL_DIVERGENCES` (like decision 20), pinned by goldens on the legacy fixture and the real r2 capture (`tests/fixtures/cisco_ios/show_ip_bgp_summary/`); token baseline regenerated (38 families, 44.0%). |
 | 25 | **IOS cdp table covered; legacy cdp row-matching anchored to column 0** | Live-lab gap (bgp_fundamentals r1–r3, 2026-08-04): IOS `show cdp neighbors` is a fixed-width table whose values carry spaces (`Eth 0/2`, `Linux Uni`), so the legacy line-regex entry fails open and the family reached the model raw (547–623 chars/call). New `cisco_ios/show_cdp_neighbors` fixed-width spec (keyed on the IOS `Holdtme` header spelling vs NX-OS `Hldtme`, so the entries never compete), engine key `first_col_wraps` re-joins IOS's wrapped long device IDs, and `row_match` generalizes to single-token first columns. Fixing the wrap exposed a smallest-wins hazard: the legacy entry's stripped-line matching false-matched INDENTED lines (wrapped-ID continuations; NX-OS interface-detail counter lines in the parity cross-matrix) into corrupt rows that can be SMALLER than the faithful rendering — corruption must not be able to win, so the legacy entry gains `unindented_rows_only` (data rows start at column 0 on every platform it knows). On-format output is byte-identical (pinned by golden in test_cisco_real_captures.py); the command family is parity-exempt via `INTENTIONAL_DIVERGENCES`. Token baseline regenerated (39 families, 43.9%). |
 | 26 | **`show ip protocols` as a post-baseline CODE compressor** | Live-lab gap (bgp_fundamentals r1–r3, 2026-08-04): 996–1557 chars/call reached the model raw. The output is block-structured (one `Routing Protocol is …` block per process) — no table strategy fits, and inventing a generic block strategy for one family is speculative generality; the registry's code tier exists precisely for stateful formats. Faithfulness contract: known boilerplate → key=value, list sections join items, and every UNRECOGNIZED line is preserved verbatim (whitespace-collapsed) — drift degrades compression, never data. Declared drops: empty list sections, static sub-table column headers. Test citizenship: the family lives in the fixture tree so the shrink diagonal, cross-matrix, audit smoke and token gate all cover it; `CODE_FAMILY_WINNERS` in test_fixture_corpus.py declares its expected winner (the winner test's `spec:` requirement was a proxy for "the family's own entry", not a spec-only rule). Not in the parity matrix (post-baseline command). 56–61% on the lab captures; token baseline regenerated (40 families, 43.7%). |
+| 27 | **YAML authoring front-end — compiled at development time, never parsed at runtime** | The front-end decision 3 deferred, landed on the compile side: specs are authored as one YAML file per command family (`neterse/specs/<vendor>/<family>.yaml`, the vendor/command layout ntc-templates made familiar; the id IS the path), and `scripts/compile_specs.py` validates them loudly (regexes must compile, header arity must match captured groups / keywords, profiles must keep real columns and drop at least one, `dropped_fields` is mandatory, unknown keys rejected) and emits the deterministic, committed `neterse/specs/_compiled.py` the runtime imports. Zero-dep invariant intact — PyYAML lives in the `test` extra only. Drift between sources and the generated module fails CI (`--check`) and the suite (`test_specs_yaml.py`), the same regenerate-and-commit flow as the token baseline (decision 18). Migration held byte-parity: the compiled dicts are deep-equal to the retired `specs.py` (sole exception: `show_ip_route`'s VERBOSE row reformatted as a block scalar — whitespace/comment changes a VERBOSE pattern ignores; the parity suite pins output). Regex authoring rule: single-quoted scalars or `\|-` blocks — YAML double quotes reject `\s`, loudly. |
+| 28 | **Unlisted specs self-append after the canonical order** | Contributing a family used to mean editing `specs.py` AND `registry.py`. The explicit canonical list stays (tie-break order is load-bearing — decision 7), but every spec id absent from it now appends strictly AFTER the full sequence in sorted-id order: deterministic without a registry edit, ties still resolve to the earlier entries, and post-baseline discipline (decision 15) is preserved by construction. A contribution is now one YAML file plus fixtures; the explicit list remains the override when a position genuinely matters. |
+| 29 | **`neterse.ntc`: optional ntc-templates front-end** (`pip install neterse[textfsm]`) | The parsed tier's thesis says the parsing ecosystems already did the per-command work — but the caller still had to run them. `neterse.ntc.parse/render/optimize` drive `ntc_templates.parse.parse_output` themselves (import is lazy, per call): with the extra installed, one call feeds TextFSM rows into `render(parsed=...)` and both tiers compete; without it — or when no template exists / the template doesn't match / the result isn't row-shaped — everything fails open to exactly the core behavior. The core package never imports it, so zero-dep holds; the tests fake the module rather than depend on it. |
 
 ## Provenance
 

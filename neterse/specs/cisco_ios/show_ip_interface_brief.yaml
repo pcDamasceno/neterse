@@ -1,0 +1,18 @@
+# show ip interface brief (IOS family) -> CSV.
+#
+# `administratively down` is one status value; without the optional
+# prefix in the status group it split across the status AND protocol
+# columns, and the real protocol column was never read (found in
+# live-lab verification, decision 21).
+command: 'show\s+ip\s+int(?:erface)?\s+brief'
+platforms: 'ios|xe|xr|nx'
+strategy: line_regex_table
+#      1: interface   2: IP            3: OK?   4: method
+#      5: status (optionally `administratively down`)   6: protocol
+row: '^(\S+)\s+(\d+\.\d+\.\d+\.\d+|unassigned)\s+(YES|NO)\s+(\S+)\s+((?:administratively )?\S+)\s+(\S+)'
+header: interface,ip,status,protocol
+columns: [1, 2, 5, 6]
+dropped_fields: [ok, method]
+profiles:
+  updown:
+    keep: [interface, status, protocol]

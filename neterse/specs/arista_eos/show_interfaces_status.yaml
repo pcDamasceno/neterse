@@ -1,0 +1,16 @@
+# show interfaces status (Arista EOS) -> CSV.
+#
+# EOS ports: Et1, Et3/1, Po10, Ma1, Vlan10, Lo0, Tu0 (row_match also
+# matches Cisco Eth1/1 — identical output to the Cisco entry there, and
+# the earlier entry wins the tie).
+command: '^show\s+int(?:erface|erfaces)?(?:\s+\S+)?\s+status\s*$'
+platforms: 'eos|arista'
+strategy: fixed_width_table
+keywords: [Port, Name, Status, Vlan, Duplex, Speed, Type]
+header: port,name,status,vlan,duplex,speed,type
+row_match: '^(?:et|po|ma|vl|lo|tu)\w*\d'
+dropped_fields: []
+profiles:
+  updown:
+    keep: [port, status]
+doc: 'show interfaces status (Arista EOS) -> CSV.'

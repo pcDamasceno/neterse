@@ -1,0 +1,17 @@
+# bare `show interface brief` (Aruba AOS-CX) -> CSV — NX-OS spells
+# per-interface variants and its table has an `Ethernet` keyword header,
+# so the two fixed-width specs can never both parse the same body.
+command: '^show\s+int(?:erface|erfaces)?\s+brief\s*$'
+platforms: 'aruba|aoscx|aos_cx|procurve'
+strategy: fixed_width_table
+keywords: [Port, Native, Mode, Type, Enabled, Status, Reason, Speed, Description]
+header: port,native_vlan,mode,type,enabled,status,reason,speed,description
+# AOS-CX member/slot/port names
+row_match: '^\d+/\d+/\d+'
+dropped_fields: []
+profiles:
+  updown:
+    keep: [port, status, reason]
+doc: >-
+  show interface brief (Aruba AOS-CX) -> CSV; wrapped header and
+  separators dropped.

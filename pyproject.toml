@@ -42,14 +42,22 @@ Issues = "https://github.com/pcDamasceno/neterse/issues"
 neterse = "neterse.audit:main"
 
 [project.optional-dependencies]
-test = ["pytest"]
-# Later phases: textfsm = ["ntc-templates"], tokens = ["tiktoken"], …
+# PyYAML is authoring-time tooling only (scripts/compile_specs.py and the
+# spec drift test) — the runtime imports the generated _compiled.py.
+test = ["pytest", "PyYAML"]
+# Drives ntc-templates/TextFSM from neterse.ntc: parse + render in one
+# call. The core never imports it — everything fails open without it.
+textfsm = ["ntc-templates"]
+# Later phases: tokens = ["tiktoken"], …
 
 [tool.setuptools]
-packages = ["neterse"]
+packages = ["neterse", "neterse.specs"]
 
 [tool.setuptools.package-data]
 neterse = ["py.typed"]
+# The YAML sources ship as reference data (the compiled module is what
+# the runtime imports); <vendor>/ dirs are data dirs, not packages.
+"neterse.specs" = ["*/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

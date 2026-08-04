@@ -1,0 +1,11 @@
+# show interface status | include/exclude ... (NX-OS) -> CSV. The
+# filtered output loses the fixed-width header, so rows are re-parsed
+# with a whitespace regex instead.
+command: '^show\s+int(?:erface|erfaces)?\s+status\s*\|\s*(?:include|exclude)\b.*$'
+platforms: 'nx'
+strategy: line_regex_table
+#      1: port   2: name (may contain spaces)   3: status   4: vlan
+#      5: duplex 6: speed   7: type
+row: '^(\S+)\s+(.+?)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s*$'
+header: port,name,status,vlan,duplex,speed,type
+dropped_fields: []
