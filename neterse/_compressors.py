@@ -594,6 +594,88 @@ def _compress_ip_route_vrf_summary(raw: str) -> str:
     return "\n".join(out)
 
 
+# ---------------------------------------------------------------------------
+# show bgp all summary (IOS/IOS-XE)
+# ---------------------------------------------------------------------------
+
+_BGP_ALL_AF = re.compile(r"^For address family:\s*(.+)$")
+_BGP_ALL_ROW = re.compile(
+    r"^(\S+)\s+"             # neighbor
+    r"(\d+)\s+"              # version
+    r"(\d+(?:\.\d+)?)\s+"  # AS (plain or asdot)
+    r"(\d+)\s+"              # messages received
+    r"(\d+)\s+"              # messages sent
+    r"(\d+)\s+"              # table version
+    r"(\d+)\s+"              # input queue
+    r"(\d+)\s+"              # output queue
+    r"(\S+)"                  # up/down
+    r"(?:\s+(.+?))?\s*$"     # state/prefixes, when not wrapped
+)
+_BGP_ALL_HEADER_WORDS = (
+    "Neighbor", "V", "AS", "MsgRcvd", "MsgSent", "TblVer", "InQ", "OutQ",
+    "Up/Down", "State",
+)
+
+
+def _compress_bgp_all_summary(raw: str) -> str:
+    """Rejoin wrapped State/PfxRcd cells and preserve all summary metadata."""
+    if "[TRUNCATED" in raw:
+        return raw
+    out: list = []
+    pending: Optional[list] = None
+    saw_family = False
+    in_table = False
+    row_count = 0
+
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if pending is not None:
+            if line[:1].isspace() and stripped:
+                out.append(_csv_row(pending + [stripped]))
+                pending = None
+                row_count += 1
+                continue
+            return raw
+
+        family = _BGP_ALL_AF.match(stripped)
+        if family:
+            saw_family = True
+            in_table = False
+            out.append(f"address_family={family.group(1)}")
+            continue
+        if not saw_family:
+            return raw
+        if all(word in line for word in _BGP_ALL_HEADER_WORDS):
+            if in_table:
+                return raw
+            in_table = True
+            out.append(
+                "neighbor,v,as,msg_rcvd,msg_sent,tbl_ver,in_q,out_q,up_down,state_pfx_rcd"
+            )
+            continue
+        if in_table and stripped == "/PfxRcd":
+            continue
+        if in_table:
+            match = _BGP_ALL_ROW.match(stripped)
+            if match is None:
+                return raw
+            fields = list(match.groups())
+            state = fields.pop()
+            if state is None:
+                pending = fields
+            else:
+                out.append(_csv_row(fields + [state]))
+                row_count += 1
+            continue
+        out.append(stripped)
+
+    if pending is not None or not saw_family or row_count == 0:
+        return raw
+    return "\n".join(out)
+
+
 # ---- show ip protocols (IOS/IOS-XE) ---------------------------------------
 # Block-structured output — one "Routing Protocol is ..." block per process
 # — that no table strategy fits. Known boilerplate collapses to key=value

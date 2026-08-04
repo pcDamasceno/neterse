@@ -157,6 +157,11 @@ REGISTRY: List[Entry] = [
         _c._compress_transceiver_inventory,
         dropped_fields=(),
     ),
+    _code_entry(
+        r"^show\s+bgp\s+all\s+summary\s*$",
+        _c._compress_bgp_all_summary,
+        dropped_fields=("table_alignment", "wrapped_header"),
+    ),
     _spec_entry(_BY_ID["cisco_nxos/show_interface_status_filtered"]),
     # -- Phase-3 vendor expansion: strictly AFTER the legacy sequence, so
     #    equal-length ties keep resolving to the baseline entries.
