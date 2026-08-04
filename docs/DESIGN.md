@@ -1,9 +1,11 @@
 # neterse — design, topology, and plan
 
-*Status: Phase 3 shipped (0.4.0); the PyPI publish itself awaits the
-maintainer's tag (docs/RELEASING.md). This document is the project's
-source of truth for architecture and roadmap; decisions recorded here
-are binding until a new entry supersedes them.*
+*Status: Phase 3 shipped (0.4.0), and dbcli — the first consumer — has
+executed its side of the Phase-4 cutover (commit-pinned git dependency);
+the PyPI publish itself awaits the maintainer's tag (docs/RELEASING.md).
+This document is the project's source of truth for architecture and
+roadmap; decisions recorded here are binding until a new entry supersedes
+them.*
 
 ## The problem
 
@@ -130,7 +132,7 @@ iter_compressors() / iter_entries()    # registry views
 | 1 | Spec engine (generic strategies over dict specs); 9/15 families converted; platform-keyed dispatch; lossiness manifests on every entry | ✅ shipped (0.2.0) |
 | 2 | **Parsed tier**: `parsed=` accepts pre-parsed rows → field projection + compact encoders (`parsed:csv` beats `json.dumps(rows)` by ~45–50%; `parsed:toon` adds the explicit row count); opt-in `profile=` projections with inline omission markers (`updown` ships first); `kv_extract` strategy moved `show version` to a spec (10 specs + 5 code) | ✅ shipped (0.3.0) |
 | 3 | **Community launch**: `neterse audit` coverage CLI + parity replay ports, fixture-per-file layout (`tests/fixtures/<platform>/<family>/`), CI token-savings regression (pinned `o200k_base`, committed baseline, 35% floor), 9 new families across Arista EOS / Junos / Aruba AOS-CX / MikroTik, release workflow via PyPI Trusted Publishing | ✅ shipped (0.4.0) — publish tag is a maintainer action ([RELEASING.md](RELEASING.md)) |
-| 4 | dbcli (and other consumers) swap their vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ▢ |
+| 4 | dbcli (and other consumers) swap their vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ◐ dbcli cutover executed 2026-08-04 (dbcli@5598e204: incubator + vendored tests deleted, shim kept, `neterse` commit-pinned as a git dependency — [CONSUMER-HANDOFF.md](CONSUMER-HANDOFF.md) §6); remaining: first PyPI publish, flip dbcli's pin to `neterse>=0.4`, toon-format proposal |
 
 The inputs each of those phases needs from the consumer side — the seam
 neterse plugs into, the parsed-tier acceptance test, the audit-tool port
@@ -195,10 +197,16 @@ froze the API and proved byte-equivalence against the in-tree
 implementation; this repository's `tests/legacy_snapshot.py` is that
 frozen module and remains the standing acceptance baseline.
 
-dbcli still vendors the **Phase-0** copy (`dbcli/_incubator/showbrief`,
-0.1.0, reached through a `dbcli/services/token_optimizer.py` re-export
-shim); Phase 1 landed here only and is deliberately **not** back-ported —
-0.2.0's default path is byte-identical to the shared baseline, so the
-Phase-4 swap to the pip dependency needs no re-baselining and a second
-synchronized copy would buy nothing. Divergence detail and the cutover
-checklist: [CONSUMER-HANDOFF.md](CONSUMER-HANDOFF.md) §1 and §6.
+dbcli vendored the **Phase-0** copy (`dbcli/_incubator/showbrief`, 0.1.0)
+until 2026-08-04, when it executed the Phase-4 cutover exactly as
+[CONSUMER-HANDOFF.md](CONSUMER-HANDOFF.md) §6 prescribed (dbcli@5598e204):
+the incubator and its vendored test suites are deleted, the
+`dbcli/services/token_optimizer.py` shim remains as the import path every
+call site uses — now re-exporting this package — and `neterse` is a
+commit-pinned git dependency in dbcli's requirements until the first PyPI
+release (then `neterse>=0.4`). The bet that the swap would need no
+re-baselining held: the default path stayed byte-identical to the shared
+baseline throughout Phases 1–3, apart from the recorded divergences
+(decisions 20, 24, 25), each pinned by its own goldens. The pre-cutover
+divergence detail in [CONSUMER-HANDOFF.md](CONSUMER-HANDOFF.md) §1 is
+retained as history.

@@ -12,16 +12,21 @@ needs dbcli access.*
 compressors, `f436a88a` token-optimization skill + run analyzer,
 `962c3a8a` per-run savings ledger, `3095000b` Phase-0 extraction).
 
+**Updated** 2026-08-04: the Phase-4 cutover in §6 has been **executed**
+on dbcli `main` (dbcli@5598e204, merged as 2300ac50). §1 describes the
+pre-cutover state and stays as history; §6 records how the checklist
+actually landed.
+
 ---
 
-## 1. Consumer state today — and the divergence
+## 1. Consumer state at capture time — and the divergence (historical)
 
-dbcli vendors the **Phase-0 cut** as `dbcli/_incubator/showbrief`
-(package name `showbrief`, version 0.1.0), reached through the re-export
-shim `dbcli/services/token_optimizer.py` — the import path every call
-site, script, and historical test uses. Phase 1 (spec engine, platform
-keying, lossiness manifests) landed **here only** and was never
-back-ported.
+Until the Phase-4 cutover (§6), dbcli vendored the **Phase-0 cut** as
+`dbcli/_incubator/showbrief` (package name `showbrief`, version 0.1.0),
+reached through the re-export shim `dbcli/services/token_optimizer.py` —
+the import path every call site, script, and historical test uses.
+Phase 1 (spec engine, platform keying, lossiness manifests) landed
+**here only** and was never back-ported.
 
 | there (dbcli) | here (neterse) | state |
 |---|---|---|
@@ -38,7 +43,7 @@ repos freeze the *same* pre-extraction module as that baseline. dbcli can
 therefore adopt neterse ≥ 0.2.0 without re-baselining anything, and there
 is no reason to back-port Phase 1 into the vendored copy: it would be
 work whose only outcome is a second copy to keep in sync until Phase 4
-deletes it.
+deleted it — as it now has.
 
 ---
 
@@ -222,6 +227,13 @@ expansion:
 
 ## 6. Phase-4 cutover checklist (dbcli side)
 
+**Executed** 2026-08-04 in dbcli@5598e204 (merged as 2300ac50), exactly
+as written below — with one refinement to step 1: until the first PyPI
+release the dependency is **commit-pinned** as a git requirement
+(`neterse @ git+https://github.com/pcDamasceno/neterse.git@<commit>`);
+it becomes `neterse>=0.4` once published. Step 6 (restart) is a
+per-deployment action, not a repo change.
+
 No alembic migration, no deployment topology change — the package ships
 inside the image via pip, where it previously shipped inside `dbcli/`.
 
@@ -252,7 +264,7 @@ the smallest-wins policy. None of that comes here (invariant 3).
 | the seam | `dbcli/modules/agents/tools/network_tools.py::_optimize_show_output` |
 | per-run ledger | `dbcli/modules/agents/token_economy_ledger.py` |
 | shim consumers import | `dbcli/services/token_optimizer.py` |
-| vendored Phase-0 copy | `dbcli/_incubator/showbrief/` |
+| vendored Phase-0 copy | deleted in the Phase-4 cutover (dbcli@5598e204); the dependency pin lives in `requirements.txt` |
 | the working loop, written down | `.claude/skills/token-optimization/SKILL.md` |
-| run analyzer / parity replay | `.claude/skills/token-optimization/scripts/` (copies in `docs/reference/`) |
+| run analyzer | `.claude/skills/token-optimization/scripts/analyze_run.py` (the parity replay now lives here only: `scripts/replay_parity.py`) |
 | seam + ledger tests | `tests/agents/test_structured_show_output.py`, `tests/agents/test_token_economy_ledger.py` |

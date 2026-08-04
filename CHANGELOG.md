@@ -1,30 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- **`show ip protocols` covered (decision 26).** Block-structured IOS
-  output no table strategy fits — new code compressor renders one line
-  per routing-protocol block (`proto "bgp 200": filters=none |
-  neighbors=… | distance=…`), 56–61% fewer chars on the lab captures
-  (996–1557 chars/call reached the model raw before). Known boilerplate
-  collapses to key=value, list sections join their items, and every
-  unrecognized line survives verbatim — format drift degrades
-  compression, never faithfulness. Empty list sections and static
-  sub-table column headers are dropped, declared. Fixture-tree family
-  with a declared code winner (`CODE_FAMILY_WINNERS`); the `$`-anchored
-  command regex keeps `show ip protocols summary` out.
-- **IOS `show cdp neighbors` covered (decision 25).** The legacy
-  cdp/lldp entry expects single-token row values and fails open on real
-  IOS output (`Eth 0/2`, `Linux Uni` — bgp_fundamentals lab, 547–623
-  chars/call straight to the model). New `cisco_ios/show_cdp_neighbors`
-  fixed-width spec parses it (58% fewer chars, holdtime kept, legend +
-  derivable entry-count dropped), with engine support for IOS's
-  wrapped-device-ID lines (`first_col_wraps`). The legacy entry gains
-  `unindented_rows_only`: its stripped-line matching let indented
-  continuation/counter lines false-match into corrupt rows that could
-  WIN smallest-wins — on-format output is unchanged (pinned by golden),
-  off-format garbage is parity-exempt via `INTENTIONAL_DIVERGENCES`.
-
 ## 0.4.0 — Phase 3: community launch
 
 **Renamed to `neterse`** ("network terse") before first publish —
@@ -32,6 +7,11 @@ distribution, import, and CLI all share the name, replacing the working
 names `terse` (import) / `terse-net` (distribution), since PyPI `terse`
 is squatted by an abandoned 2019 package (decision 23). No PEP 541
 process needed; nothing was ever published under the old names.
+
+(0.4.0 has never been published — the first PyPI release will be this
+version — so the post-cut lab-verification work below, including the
+bgp_fundamentals round (decisions 25–26), folds into this section
+instead of minting a new version number.)
 
 ### Live-lab verification (post-release-candidate)
 
@@ -61,7 +41,31 @@ the baseline itself wrong twice. Both fixes ship in 0.4.0:
 - Known gaps confirmed by the audit on live traffic, ranked: `show ip
   ospf database`, `show ip protocols`, `show interfaces description`,
   `show ip ospf interface brief`, and IOL-spaced `show cdp neighbors`
-  (`Eth 0/0`) — all fail open, none lose data.
+  (`Eth 0/0`) — all fail open, none lose data. The cdp and ip-protocols
+  gaps were closed in a later lab round (next two bullets); the rest are
+  covered by the parsed tier (below).
+- **IOS `show cdp neighbors` covered (decision 25).** The legacy
+  cdp/lldp entry expects single-token row values and fails open on real
+  IOS output (`Eth 0/2`, `Linux Uni` — bgp_fundamentals lab, 547–623
+  chars/call straight to the model). New `cisco_ios/show_cdp_neighbors`
+  fixed-width spec parses it (58% fewer chars, holdtime kept, legend +
+  derivable entry-count dropped), with engine support for IOS's
+  wrapped-device-ID lines (`first_col_wraps`). The legacy entry gains
+  `unindented_rows_only`: its stripped-line matching let indented
+  continuation/counter lines false-match into corrupt rows that could
+  WIN smallest-wins — on-format output is unchanged (pinned by golden),
+  off-format garbage is parity-exempt via `INTENTIONAL_DIVERGENCES`.
+- **`show ip protocols` covered (decision 26).** Block-structured IOS
+  output no table strategy fits — new code compressor renders one line
+  per routing-protocol block (`proto "bgp 200": filters=none |
+  neighbors=… | distance=…`), 56–61% fewer chars on the lab captures
+  (996–1557 chars/call reached the model raw before). Known boilerplate
+  collapses to key=value, list sections join their items, and every
+  unrecognized line survives verbatim — format drift degrades
+  compression, never faithfulness. Empty list sections and static
+  sub-table column headers are dropped, declared. Fixture-tree family
+  with a declared code winner (`CODE_FAMILY_WINNERS`); the `$`-anchored
+  command regex keeps `show ip protocols summary` out.
 - **`show ip bgp summary` AS fix (decision 24, baseline change).** The
   legacy regex captured the V column (BGP version, constant `4`) under
   the `as` header and silently dropped the real AS — eBGP and iBGP
@@ -90,9 +94,11 @@ the baseline itself wrong twice. Both fixes ship in 0.4.0:
   now match. Additive — profiles only; default path untouched.
 
 Default-path outputs for all legacy families remain byte-identical to
-the frozen baseline (parity cross-matrix). New vendor families are
-post-baseline: covered behaviorally, never allowed to change a legacy
-result (decision 15).
+the frozen baseline (parity cross-matrix), apart from the recorded
+divergences above (decisions 20, 24, 25 — each parity-exempt via
+`INTENTIONAL_DIVERGENCES` and pinned by its own goldens). New vendor
+families are post-baseline: covered behaviorally, never allowed to
+change a legacy result (decision 15).
 
 - **`neterse audit`** (`neterse/audit.py`, console script `neterse` /
   `python -m neterse`): the coverage tool, ported from dbcli's run
