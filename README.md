@@ -48,6 +48,45 @@ Eth1/11,RSRFF206 Twe1/0/3,connected,routed,full,10G,10Gbase-SR
 Eth1/45,RFRA3213-Eth1/48,connected,routed,full,10G,10Gbase-LR
 ```
 
+## Drop-in with netmiko and scrapli
+
+Already running commands with the libraries everyone uses? Compaction is
+one import away — neterse rides on top of the TextFSM parsing they
+already do, and never imports either library itself.
+
+```python
+# netmiko — same call shape, compact result (kwargs pass through):
+from netmiko import ConnectHandler
+from neterse.netmiko import send_command
+
+conn = ConnectHandler(device_type="cisco_ios", host="10.0.0.1", **credentials)
+output = send_command(conn, "show interface status")
+```
+
+```python
+# scrapli — hand over the Response; raw + TextFSM tiers compete:
+from scrapli.driver.core import IOSXEDriver
+from neterse.scrapli import compact
+
+with IOSXEDriver(**device) as conn:
+    output = compact(conn.send_command("show interface status"))
+    # send_commands([...]) returns a MultiResponse — map over it:
+    outputs = [compact(r) for r in conn.send_commands(commands)]
+```
+
+```python
+# Already parsed it yourself? (netmiko use_textfsm=True, scrapli
+# textfsm_parse_output(), any API/gNMI rows) — compact the structure:
+from neterse import optimize_parsed
+
+rows = conn.send_command("show ip int brief", use_textfsm=True)
+output = optimize_parsed(rows)   # header-once CSV/TOON — never larger
+                                 # than the compact JSON of the rows
+```
+
+Everything stays fail-open: no template, no `textfsm` extra, an
+unshrinkable output — you get the original result back, byte-identical.
+
 ## Install
 
 ```bash
@@ -126,8 +165,9 @@ uniform tables is on the roadmap.
 | 2 | Parsed tier: field projection + compact encoders (CSV/TOON) over pre-parsed rows; opt-in profiles with inline omission markers; `kv_extract` strategy | ✅ |
 | 3 | `neterse audit` coverage tool, fixture-per-file contribution flow, CI token-savings regression (pinned tokenizer), multi-vendor expansion (Arista EOS, Junos, Aruba AOS-CX, MikroTik), PyPI release machinery | ✅ |
 | 4 | Contributor scale-out: YAML spec authoring (one `specs/<vendor>/<family>.yaml` per family, compiled — never parsed — at runtime), registry self-append, `neterse[textfsm]` extra driving ntc-templates end-to-end | ✅ |
-| 5 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
-| 6 | Beyond the CLI: the same candidates contract for MCP tool results, API responses, and generic JSON payloads | ▢ |
+| 5 | Runner integrations: `neterse.netmiko` / `neterse.scrapli` drop-ins (duck-typed, import nothing) + rows-only `render_parsed`/`optimize_parsed` for already-parsed output | ✅ |
+| 6 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
+| 7 | Beyond the CLI: the same candidates contract for MCP tool results, API responses, and generic JSON payloads | ▢ |
 
 ## Coverage
 

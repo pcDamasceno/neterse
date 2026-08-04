@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Runner integrations: netmiko & scrapli (decision 31)
+
+- **`neterse.netmiko.send_command(conn, "show ...")`** — the netmiko
+  call itself is untouched (kwargs pass through); the result comes back
+  as the smallest faithful rendering. The connection's `device_type`
+  drives the raw-tier platform filter, and — with `neterse[textfsm]`
+  installed — keys the ntc-templates parse the way netmiko's own
+  `use_textfsm=True` actually resolves: suffix-stripped first, verbatim
+  second (WLC templates key on `cisco_wlc_ssh`), then the
+  `cisco_xe` → `cisco_ios` retry — so both tiers compete. A structured
+  result (`use_textfsm=True`) routes to the rows-only path
+  automatically; `neterse.netmiko.compact(output, ...)` does the same
+  for output already in hand.
+- **`neterse.scrapli.compact(response)`** (and the candidates-not-policy
+  `neterse.scrapli.render(response)`) — reads everything off the scrapli
+  `Response` itself: `result`, `channel_input`, `textfsm_platform`, and
+  `textfsm_parse_output()` when `scrapli[textfsm]` is available.
+- Both modules are **duck-typed and import neither library** — the core
+  stays zero-dependency, every failure path degrades toward returning
+  the device output unchanged, and the test suite pins the contracts
+  with fakes (no new test dependencies).
+
+### Rows-only compaction (decision 30)
+
+- **`neterse.render_parsed(rows)` / `neterse.optimize_parsed(rows)`** —
+  for output that arrives ALREADY parsed (netmiko `use_textfsm=True`,
+  scrapli `textfsm_parse_output()`, API/gNMI payloads) with no raw text
+  in hand. Candidates are gated against the compact JSON a consumer
+  would otherwise send (`json.dumps(rows, separators=(",", ":"),
+  default=str)`);
+  `optimize_parsed` returns the smallest of the two, so it never
+  enlarges. Strings pass through byte-identical — netmiko's no-template
+  fallback returns raw text, which belongs to `optimize`.
+
 ### YAML spec authoring (decisions 27–28) — the contribution surface
 
 - **Specs are now authored as YAML**, one file per command family under

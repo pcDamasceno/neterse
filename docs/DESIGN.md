@@ -1,7 +1,7 @@
 # neterse — design, topology, and plan
 
-*Status: Phase 4 shipped (YAML spec authoring, registry self-append,
-`neterse.ntc`); the PyPI publish itself awaits the
+*Status: Phase 5 shipped (netmiko/scrapli drop-ins, rows-only
+compaction); the PyPI publish itself awaits the
 maintainer's tag (docs/RELEASING.md).
 This document is the project's source of truth for architecture and
 roadmap; decisions recorded here are binding until a new entry supersedes
@@ -47,7 +47,9 @@ faithful representation before it enters model context.
         │  │ produced → header-once encoders (parsed:csv, parsed:toon);  ││
         │  │ command-independent; profile projections by field name.     ││
         │  │ ntc.py (extra: neterse[textfsm]) drives ntc-templates       ││
-        │  │ itself: parse + render in one call, fail-open without it    ││
+        │  │ itself: parse + render in one call, fail-open without it.   ││
+        │  │ netmiko.py / scrapli.py: duck-typed drop-ins for the two    ││
+        │  │ big runner libraries — one call, both tiers, fail-open      ││
         │  └─────────────────────────────────────────────────────────────┘│
         │                                                                 │
         │  render() → [Candidate(text, method, source, dropped_fields,    │
@@ -80,10 +82,20 @@ optimize(command, raw) -> str          # == min(render(...)) or raw
 register(pattern, *, platforms=None, dropped_fields=None)   # plugin hatch
 iter_compressors() / iter_entries()    # registry views
 
+# rows-only (already-parsed output, no raw text in hand) — decision 30:
+render_parsed(parsed, *, profile="default") -> list[Candidate]
+optimize_parsed(parsed, *, profile="default") -> str   # min or compact JSON
+
 # optional extra (pip install neterse[textfsm]) — decision 29:
 neterse.ntc.parse(raw, *, command, platform) -> list[dict] | None
 neterse.ntc.render(raw, *, command, platform, profile="default")
 neterse.ntc.optimize(command, raw, *, platform) -> str
+
+# duck-typed runner drop-ins (import nothing) — decision 31:
+neterse.netmiko.send_command(conn, cmd, *, profile="default", **kw) -> str
+neterse.netmiko.compact(output, *, command, platform=None, profile="default")
+neterse.scrapli.compact(response, *, profile="default") -> str
+neterse.scrapli.render(response, *, profile="default") -> list[Candidate]
 ```
 
 * `platform`: skip-filter over declared platform
@@ -147,8 +159,9 @@ neterse.ntc.optimize(command, raw, *, platform) -> str
 | 2 | **Parsed tier**: `parsed=` accepts pre-parsed rows → field projection + compact encoders (`parsed:csv` beats `json.dumps(rows)` by ~45–50%; `parsed:toon` adds the explicit row count); opt-in `profile=` projections with inline omission markers (`updown` ships first); `kv_extract` strategy moved `show version` to a spec (10 specs + 5 code) | ✅ shipped |
 | 3 | **Community launch**: `neterse audit` coverage CLI + parity replay ports, fixture-per-file layout (`tests/fixtures/<platform>/<family>/`), CI token-savings regression (pinned `o200k_base`, committed baseline, 35% floor), 9 new families across Arista EOS / Junos / Aruba AOS-CX / MikroTik, release workflow via PyPI Trusted Publishing | ✅ shipped (0.1.0) — publish tag is a maintainer action ([RELEASING.md](RELEASING.md)) |
 | 4 | **Contributor scale-out**: YAML spec authoring — one `neterse/specs/<vendor>/<family>.yaml` per family, validated + compiled to the committed `_compiled.py` (decision 27, CI drift gate); registry self-append for unlisted specs (decision 28: a contribution is one YAML file + fixtures); `neterse.ntc` extra drives ntc-templates end-to-end (decision 29, `pip install neterse[textfsm]`) | ✅ shipped |
-| 5 | Consumers swap any vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ◐ remaining: first PyPI publish, toon-format proposal |
-| 6 | **Beyond the CLI**: the same candidates contract for other verbose-payload surfaces an agent reads — MCP tool results, REST/API responses, generic JSON documents. The parsed tier is the seam (structured rows are already command-independent); what's new is dispatch keyed on something other than a CLI command string | ▢ design |
+| 5 | **Runner integrations**: `neterse.netmiko` (`send_command(conn, cmd)`) and `neterse.scrapli` (`compact(response)`) drop-ins — duck-typed, import nothing (decision 31); rows-only `render_parsed`/`optimize_parsed` gated against compact JSON for output that arrives already parsed (decision 30) | ✅ shipped |
+| 6 | Consumers swap any vendored copy for the pip dependency; propose a "TOON profile for network data" upstream to toon-format | ◐ remaining: first PyPI publish, toon-format proposal |
+| 7 | **Beyond the CLI**: the same candidates contract for other verbose-payload surfaces an agent reads — MCP tool results, REST/API responses, generic JSON documents. The parsed tier is the seam (structured rows are already command-independent); what's new is dispatch keyed on something other than a CLI command string | ▢ design |
 
 The Phase-2 acceptance rule — beat `json.dumps(rows)` on multi-row output
 or don't ship the tier — is pinned permanently in `tests/test_parsed.py`.
@@ -198,6 +211,8 @@ competes with the parser projects.
 | 27 | **YAML authoring front-end — compiled at development time, never parsed at runtime** | The front-end decision 3 deferred, landed on the compile side: specs are authored as one YAML file per command family (`neterse/specs/<vendor>/<family>.yaml`, the vendor/command layout ntc-templates made familiar; the id IS the path), and `scripts/compile_specs.py` validates them loudly (regexes must compile, header arity must match captured groups / keywords, profiles must keep real columns and drop at least one, `dropped_fields` is mandatory, unknown keys rejected) and emits the deterministic, committed `neterse/specs/_compiled.py` the runtime imports. Zero-dep invariant intact — PyYAML lives in the `test` extra only. Drift between sources and the generated module fails CI (`--check`) and the suite (`test_specs_yaml.py`), the same regenerate-and-commit flow as the token baseline (decision 18). Migration held byte-parity: the compiled dicts are deep-equal to the retired `specs.py` (sole exception: `show_ip_route`'s VERBOSE row reformatted as a block scalar — whitespace/comment changes a VERBOSE pattern ignores; the parity suite pins output). Regex authoring rule: single-quoted scalars or `\|-` blocks — YAML double quotes reject `\s`, loudly. |
 | 28 | **Unlisted specs self-append after the canonical order** | Contributing a family used to mean editing `specs.py` AND `registry.py`. The explicit canonical list stays (tie-break order is load-bearing — decision 7), but every spec id absent from it now appends strictly AFTER the full sequence in sorted-id order: deterministic without a registry edit, ties still resolve to the earlier entries, and post-baseline discipline (decision 15) is preserved by construction. A contribution is now one YAML file plus fixtures; the explicit list remains the override when a position genuinely matters. |
 | 29 | **`neterse.ntc`: optional ntc-templates front-end** (`pip install neterse[textfsm]`) | The parsed tier's thesis says the parsing ecosystems already did the per-command work — but the caller still had to run them. `neterse.ntc.parse/render/optimize` drive `ntc_templates.parse.parse_output` themselves (import is lazy, per call): with the extra installed, one call feeds TextFSM rows into `render(parsed=...)` and both tiers compete; without it — or when no template exists / the template doesn't match / the result isn't row-shaped — everything fails open to exactly the core behavior. The core package never imports it, so zero-dep holds; the tests fake the module rather than depend on it. |
+| 30 | **Rows-only entry points: `render_parsed`/`optimize_parsed`, gated against compact JSON** | The runner libraries hand back ALREADY-parsed structures (netmiko `use_textfsm=True`, scrapli `textfsm_parse_output()`), leaving no raw string for the usual shrink gate. The honest competitor is what a consumer would otherwise put in context: `json.dumps(rows, separators=(",", ":"), default=str)` (the `default=str` matters — parser rows legitimately carry datetimes and address objects). Candidates must strictly undercut it; when nothing does — or the input isn't row-shaped — `optimize_parsed` returns that compact JSON itself, so the API never enlarges and never loses. Strings pass through untouched: netmiko's no-template fallback returns raw text, and JSON-quoting it would corrupt the one input every user eventually feeds this API (compact raw text with `optimize`). Truly unencodable input (circular refs) falls back to `repr`, the only faithful text left. |
+| 31 | **Runner integrations are duck-typed and import nothing** | `neterse.netmiko` and `neterse.scrapli` read only the public attribute surface (`device_type` + `send_command`; `result`/`channel_input`/`textfsm_platform`/`textfsm_parse_output()`), so neither library is ever imported: zero-dep holds, the contract is testable with fakes instead of heavyweight dependencies, and any work-alike object is welcome. Platform flows from what the library already knows — netmiko's `device_type`, scrapli's `textfsm_platform` — feeding the raw-tier skip filter verbatim, while the netmiko-path ntc-templates keying tries what actually resolves: the suffix-stripped spelling first (`_ssh`/`_telnet`/`_serial` — strictly better than netmiko's own verbatim keying for telnet users), the verbatim `device_type` second (ntc-templates keys every WLC template on `cisco_wlc_ssh` itself), and netmiko's documented `cisco_xe` → `cisco_ios` retry last (ntc-templates ships zero `cisco_xe` templates). Every failure mode degrades stepwise: parsed tier drops out, then raw tier, then the device output returns unchanged. Verified against the real libraries locally (real ntc-templates parses of fixture captures; a real constructed `scrapli.response.Response`); CI stays on the fakes. |
 
 ## Provenance
 

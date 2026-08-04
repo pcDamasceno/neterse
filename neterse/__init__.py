@@ -11,6 +11,14 @@ Public API:
 * :func:`optimize` — convenience wrapper preserving the historical
   behavior byte-for-byte: smallest candidate's text, or the raw output
   unchanged when nothing shrinks it.
+* :func:`render_parsed` / :func:`optimize_parsed` — the rows-only entry
+  points for output that arrives ALREADY parsed (netmiko
+  ``use_textfsm=True``, scrapli ``textfsm_parse_output()``, an API or
+  gNMI call) with no raw CLI text in hand: candidates are gated against
+  the compact JSON a consumer would otherwise send, and
+  ``optimize_parsed`` returns the smallest of the two (strings pass
+  through untouched — a parser's raw-text fallback is :func:`optimize`'s
+  business).
 * :func:`register` — plugin escape hatch: bind your own compressor to a
   command regex, optionally scoped by ``platforms`` and carrying a
   ``dropped_fields`` manifest.
@@ -56,6 +64,7 @@ Invariants — enforced here, relied on by every consumer:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple
@@ -77,8 +86,10 @@ __all__ = [
     "iter_compressors",
     "iter_entries",
     "optimize",
+    "optimize_parsed",
     "register",
     "render",
+    "render_parsed",
     "__version__",
 ]
 
@@ -193,6 +204,77 @@ def render(
                     )
                 )
     return candidates
+
+
+def _parsed_baseline(parsed: Any) -> Optional[str]:
+    """The compact JSON a consumer would otherwise put in context — the
+    honest competitor when no raw text exists to gate against. ``None``
+    when *parsed* can't even be JSON-encoded (fail-open)."""
+    try:
+        return json.dumps(parsed, separators=(",", ":"), default=str)
+    except Exception:
+        return None
+
+
+def render_parsed(parsed: Any, *, profile: str = "default") -> list:
+    """Candidates for rows ALONE — no raw CLI text in hand.
+
+    Output that arrives already parsed (netmiko ``use_textfsm=True``,
+    scrapli ``textfsm_parse_output()``, API/gNMI payloads) has no raw
+    string for the usual shrink gate, so candidates are gated against
+    the compact JSON encoding of *parsed* instead — the representation a
+    consumer would otherwise send. An empty list means compact JSON is
+    already minimal (or the input isn't row-shaped): send that. Strings
+    yield no candidates — a parser falling back to raw text is raw-tier
+    business (:func:`render`/:func:`optimize`). Fail-open, like
+    everything else.
+    """
+    if parsed is None or isinstance(parsed, str):
+        return []
+    baseline = _parsed_baseline(parsed)
+    if baseline is None:
+        return []
+    try:
+        encoded = _parsed_tier.encode(parsed, _profile_key(profile))
+    except Exception:
+        logger.debug("neterse parsed-only tier failed, skipping", exc_info=True)
+        return []
+    return [
+        Candidate(
+            text=text,
+            method="parsed",
+            source=source,
+            dropped_fields=drops,
+            profile=applied,
+        )
+        for text, source, drops, applied in encoded
+        if isinstance(text, str) and 0 < len(text) < len(baseline)
+    ]
+
+
+def optimize_parsed(parsed: Any, *, profile: str = "default") -> str:
+    """Smallest faithful text for already-parsed output: the best
+    parsed-tier encoding, or the compact JSON of *parsed* when nothing
+    undercuts it. Strings return unchanged (netmiko's no-template
+    fallback hands back raw text — compact that with :func:`optimize`).
+    """
+    if isinstance(parsed, str):
+        return parsed
+    baseline = _parsed_baseline(parsed)
+    if baseline is None:
+        # Not JSON-encodable at all (circular refs, a value whose
+        # __str__ raises, absurd nesting depth): repr is the only
+        # faithful text left, and the object.__repr__ guard invokes no
+        # user code and cannot recurse — this path can never raise.
+        try:
+            return repr(parsed)
+        except Exception:
+            return object.__repr__(parsed)
+    best: Optional[Candidate] = None
+    for candidate in render_parsed(parsed, profile=profile):
+        if best is None or len(candidate.text) < len(best.text):
+            best = candidate
+    return best.text if best is not None else baseline
 
 
 def optimize(command: str, raw_output: str) -> str:
