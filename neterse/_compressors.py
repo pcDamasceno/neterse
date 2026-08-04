@@ -311,10 +311,11 @@ def _compress_intf_counter_errors(raw: str) -> str:
     out: list = []
     cols: Optional[list] = None
     table_rows: list = []
+    pending_tokens: list = []
     saw_table = False
 
     def _flush() -> None:
-        nonlocal cols, table_rows
+        nonlocal cols, table_rows, pending_tokens
         if cols is not None:
             header = ",".join(["port"] + cols[1:])
             if table_rows:
@@ -325,29 +326,94 @@ def _compress_intf_counter_errors(raw: str) -> str:
             out.append("")
         cols = None
         table_rows = []
+        pending_tokens = []
+
+    def _consume(tokens: list) -> bool:
+        if (
+            cols
+            and len(tokens) == len(cols)
+            and all(_COUNTER_VAL_RE.match(token) for token in tokens[1:])
+        ):
+            if any(token not in ("0", "--") for token in tokens[1:]):
+                table_rows.append(",".join(tokens))
+            return True
+        return False
 
     for line in raw.splitlines():
         s = line.strip()
         if not s or set(s) <= {"-"}:
             continue
         toks = s.split()
+        if pending_tokens:
+            combined = pending_tokens + toks
+            if _consume(combined):
+                pending_tokens = []
+                continue
+            return raw
         if toks[0] == "Port":
             _flush()
             cols = toks
             saw_table = True
             continue
+        if _consume(toks):
+            continue
         if (
             cols
-            and len(toks) == len(cols)
-            and all(_COUNTER_VAL_RE.match(t) for t in toks[1:])
+            and 1 < len(toks) < len(cols)
+            and all(_COUNTER_VAL_RE.match(token) for token in toks[1:])
         ):
-            if any(t not in ("0", "--") for t in toks[1:]):
-                table_rows.append(",".join(toks))
+            pending_tokens = toks
+    if pending_tokens:
+        return raw
     _flush()
     if not saw_table:
         return raw
     body = "\n".join(out).rstrip()
     return "show interface counters errors (non-zero ports only; all others 0):\n" + body
+
+
+# ---------------------------------------------------------------------------
+# show interface [selector] transceiver (NX-OS inventory, not details)
+# ---------------------------------------------------------------------------
+
+_TRANSCEIVER_FIELD_RE = re.compile(r"^\s+(.+?)\s+is\s+(.+?)\s*$")
+
+
+def _compress_transceiver_inventory(raw: str) -> str:
+    rows: list = []
+    current: Optional[dict] = None
+    field_names: list = []
+
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if not line[:1].isspace() and _IFACE_NAME_RE.match(stripped):
+            current = {"interface": stripped}
+            rows.append(current)
+            continue
+        match = _TRANSCEIVER_FIELD_RE.match(line)
+        if current is None or match is None:
+            return raw
+        key, value = match.groups()
+        if key in current:
+            return raw
+        current[key] = value
+        if key not in field_names:
+            field_names.append(key)
+
+    if not rows or not field_names or any(len(row) < 2 for row in rows):
+        return raw
+
+    normalized = [re.sub(r"\W+", "_", name.lower()).strip("_") for name in field_names]
+    if len(set(normalized)) != len(normalized):
+        return raw
+    out = [_csv_row(["interface"] + normalized)]
+    out.extend(
+        _csv_row([row["interface"]] + [row.get(name, "") for name in field_names])
+        for row in rows
+    )
+    return "\n".join(out)
 
 
 # ---------------------------------------------------------------------------

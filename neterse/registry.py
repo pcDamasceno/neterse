@@ -126,7 +126,7 @@ REGISTRY: List[Entry] = [
     _spec_entry(_BY_ID["cisco/show_interface_status"]),
     _spec_entry(_BY_ID["cisco_nxos/show_interface_brief"]),
     _code_entry(
-        r"show\s+int(?:erface|erfaces)?\s+counters?\s+err",
+        r"show\s+int(?:erface|erfaces)?(?:\s+.*?)?\s+counters?\s+errors?\b",
         _c._compress_intf_counter_errors,
         dropped_fields=("all_zero_rows",),
     ),
@@ -152,6 +152,12 @@ REGISTRY: List[Entry] = [
         _c._compress_ip_route_vrf_summary,
         dropped_fields=(),
     ),
+    _code_entry(
+        r"^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+transceiver\s*$",
+        _c._compress_transceiver_inventory,
+        dropped_fields=(),
+    ),
+    _spec_entry(_BY_ID["cisco_nxos/show_interface_status_filtered"]),
     # -- Phase-3 vendor expansion: strictly AFTER the legacy sequence, so
     #    equal-length ties keep resolving to the baseline entries.
     _spec_entry(_BY_ID["arista_eos/show_interfaces_status"]),

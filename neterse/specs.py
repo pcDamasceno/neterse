@@ -203,7 +203,7 @@ SPECS: list = [
     },
     {
         "id": "cisco/show_interface_status",
-        "command": r"^show\s+int(?:erface|erfaces)?(?:\s+\S+)?\s+status\s*$",
+        "command": r"^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+status\s*$",
         "platforms": r"ios|xe|nx",
         "strategy": "fixed_width_table",
         "keywords": ["Port", "Name", "Status", "Vlan", "Duplex", "Speed", "Type"],
@@ -212,6 +212,26 @@ SPECS: list = [
         "profiles": {"updown": {"keep": ["port", "status"]}},
         "doc": "show interface status (NX-OS / Catalyst) -> CSV; drops the "
                "repeated dashed separators and per-block column headers.",
+    },
+    {
+        "id": "cisco_nxos/show_interface_status_filtered",
+        "command": (
+            r"^show\s+int(?:erface|erfaces)?\s+status\s*\|\s*"
+            r"(?:include|exclude)\b.*$"
+        ),
+        "platforms": r"nx",
+        "strategy": "line_regex_table",
+        "row": (
+            r"^(\S+)\s+"       # port
+            r"(.+?)\s+"         # name (may contain spaces)
+            r"(\S+)\s+"        # status
+            r"(\S+)\s+"        # vlan
+            r"(\S+)\s+"        # duplex
+            r"(\S+)\s+"        # speed
+            r"(\S+)\s*$"       # type
+        ),
+        "header": "port,name,status,vlan,duplex,speed,type",
+        "dropped_fields": (),
     },
     {
         "id": "cisco_nxos/show_interface_brief",

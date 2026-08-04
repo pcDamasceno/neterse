@@ -158,6 +158,75 @@ def test_counter_errors_failopen_without_header():
     assert optimize("show interface counters errors", raw) == raw
 
 
+def test_counter_errors_per_interface_rejoins_wrapped_row():
+    raw = """\
+-------------------------------------------------------------------------------
+Port          Align-Err    FCS-Err   Xmit-Err    Rcv-Err  UnderSize OutDiscards
+-------------------------------------------------------------------------------
+Eth1/37                 0          6          0          6          0
+0
+
+-------------------------------------------------------------------------------
+Port           Single-Col  Multi-Col   Late-Col  Exces-Col  Carri-Sen       Runts
+-------------------------------------------------------------------------------
+Eth1/37                 0          0          0          0          0
+0
+"""
+    out = optimize("show interface Ethernet1/37 counters errors", raw)
+    assert "Eth1/37,0,6,0,6,0,0" in out
+    assert "Single-Col,Multi-Col,Late-Col,Exces-Col,Carri-Sen,Runts  (all zero)" in out
+    assert len(out) < len(raw)
+
+
+def test_counter_errors_incomplete_wrapped_row_fails_open():
+    raw = """\
+Port          Align-Err    FCS-Err   Xmit-Err    Rcv-Err  UnderSize OutDiscards
+Eth1/37                 0          6          0          6          0
+"""
+    assert optimize("show interface Ethernet1/37 counters errors", raw) == raw
+
+
+def test_transceiver_inventory_unions_fields_losslessly():
+    raw = """\
+Ethernet1/1
+    transceiver is present
+    type is 10Gbase-SR
+    serial number is AVD2034DAKN
+    Link length supported for 50/125um OM3 fiber is 300 m
+
+Ethernet1/45
+    transceiver is present
+    type is 10Gbase-LR
+    serial number is AVD2052KEGS
+    Link length supported for 9/125um fiber is 10 km
+"""
+    out = optimize("show interface transceiver", raw)
+    lines = out.splitlines()
+    assert lines[0] == (
+        "interface,transceiver,type,serial_number,"
+        "link_length_supported_for_50_125um_om3_fiber,"
+        "link_length_supported_for_9_125um_fiber"
+    )
+    assert lines[1] == "Ethernet1/1,present,10Gbase-SR,AVD2034DAKN,300 m,"
+    assert lines[2] == "Ethernet1/45,present,10Gbase-LR,AVD2052KEGS,,10 km"
+    assert len(out) < len(raw)
+
+
+def test_transceiver_inventory_does_not_claim_details():
+    raw = "Ethernet1/1\n    transceiver is present\n    type is 10Gbase-SR"
+    assert optimize("show interface transceiver details", raw) == raw
+
+
+def test_transceiver_inventory_truncation_fails_open():
+    raw = """\
+Ethernet1/1
+    transceiver is present
+    type is 10Gbase-SR
+[TRUNCATED - middle omitted]
+"""
+    assert optimize("show interface transceiver", raw) == raw
+
+
 def test_interface_status_csv_header_and_rows():
     out = optimize("show interface status", STATUS)
     lines = out.splitlines()
@@ -181,6 +250,27 @@ def test_interface_status_drops_separators_and_repeated_headers():
 def test_interface_status_per_interface_variant_matches():
     out = optimize("show interface ethernet1/11 status", STATUS)
     assert out.startswith("port,name,status")
+
+
+def test_interface_status_spaced_selector_variant_matches():
+    out = optimize(
+        "show interface ethernet1/9-12, ethernet1/15, ethernet1/17 status",
+        STATUS,
+    )
+    assert out.startswith("port,name,status")
+
+
+def test_interface_status_filtered_without_header():
+    raw = """\
+Eth1/1        FREE               disabled  1         auto    auto    10Gbase-SR
+Eth1/11       RSRFF206 Twe1/0/3  connected routed    full    10G     10Gbase-SR
+"""
+    out = optimize("show interface status | include Eth1/(1|11)", raw)
+    assert out.splitlines() == [
+        "port,name,status,vlan,duplex,speed,type",
+        "Eth1/1,FREE,disabled,1,auto,auto,10Gbase-SR",
+        "Eth1/11,RSRFF206 Twe1/0/3,connected,routed,full,10G,10Gbase-SR",
+    ]
 
 
 def test_interface_brief_csv_and_wrapped_header_dropped():
