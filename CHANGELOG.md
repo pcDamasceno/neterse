@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-08-05
 
 ### One verb across runner libraries: `neterse.compact` (decision 32)
 
@@ -41,6 +41,18 @@
   `optimize_parsed` returns the smallest of the two, so it never
   enlarges. Strings pass through byte-identical — netmiko's no-template
   fallback returns raw text, which belongs to `optimize`.
+- **Keyed-dict getters now flatten and compress.** The dominant NAPALM /
+  OpenConfig shape is a dict keyed by name whose values are all dicts
+  (`get_interfaces`, `get_interfaces_counters`, `get_optics`,
+  `get_users`, `get_vlans` → `{interface: {...}}`). The parsed tier now
+  turns it into one row per entry, keeping the outer key as a leading
+  `key` column (underscore-prefixed if it would shadow an inner field),
+  so it encodes as a table instead of one unshrinkable mega-row —
+  lossless (the key becomes a cell), no caller-side flattening needed.
+  Scalar or mixed-valued dicts (`get_facts`, `get_config`,
+  `get_snmp_information`) still stay a single row. Validated live against
+  NX-OS and EOS: aggregate savings across the getter suite rose from
+  ~2% to 22–28%, `get_interfaces_counters` reaching 77–83%.
 
 ### YAML spec authoring (decisions 27–28) — the contribution surface
 
