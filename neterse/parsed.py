@@ -29,6 +29,17 @@ returned — candidates, not policy:
     unioned-column table with empty cells (a pragmatic extension of
     strict TOON; full spec compliance is a Phase-4 concern).
 
+``parsed:sections``
+    A hierarchy-preserving document for tool/API responses that mix scalar
+    metadata, nested mappings and multiple row collections. Section names and
+    scalar values remain in place while each row collection becomes a compact
+    header-once table.
+
+Vendor/API envelopes (ACI ``imdata``, NAPALM keyed getters, future
+SD-WAN / Meraki styles) are turned into canonical rows by
+:mod:`neterse.normalizers` BEFORE they reach these encoders, so this module
+stays vendor-agnostic: it encodes rows, it does not know who produced them.
+
 Faithfulness: the default profile projects nothing — every key of every
 row appears (missing keys and JSON ``null`` both render as an empty
 cell). Named profiles (:data:`PROFILES`) are declared-lossy field
@@ -47,6 +58,7 @@ import json
 import re
 from typing import Any, List, Optional, Tuple
 
+from . import normalizers
 from .engine import omission_marker
 
 # (text, source, dropped_fields, applied_profile)
@@ -69,40 +81,20 @@ PROFILES = {
 }
 
 
-def _flatten_keyed(mapping: dict) -> Optional[List[dict]]:
-    """NAPALM/OpenConfig shape ``{name: {...}}`` → one row per entry, the
-    outer key kept as a leading ``key`` column, so a dict keyed by
-    interface / VLAN / user encodes as a table instead of one
-    unshrinkable mega-row. Declines (None) unless EVERY value is a
-    string-keyed dict — a scalar or mixed dict (get_facts, get_config)
-    stays a single row; the outer keys themselves may be non-string (int
-    VLAN ids are fine). Lossless: the key becomes a cell, so nothing is
-    dropped. The ``key`` column name is prefixed with underscores as
-    needed so it never shadows an inner field.
-    """
-    if not mapping or not all(
-        isinstance(v, dict) and all(isinstance(k, str) for k in v)
-        for v in mapping.values()
-    ):
-        return None
-    keycol = "key"
-    inner = {k for v in mapping.values() for k in v}
-    while keycol in inner:
-        keycol = "_" + keycol
-    return [{keycol: name, **attrs} for name, attrs in mapping.items()]
-
-
 def _rows(parsed: Any) -> Optional[List[dict]]:
     """Normalize *parsed* to a non-empty list of str-keyed dicts, or None.
 
-    A dict keyed by name whose values are all dicts is flattened to one
-    row per entry (:func:`_flatten_keyed`); any other dict is a single
-    row. Anything else — scalars, strings, mixed lists, exotic keys — is
+    A recognized vendor/API shape (:mod:`neterse.normalizers`) is turned
+    into rows; any other dict is a single row; a list/tuple is taken
+    as-is. Anything else — scalars, strings, mixed lists, exotic keys — is
     not row-shaped data we can encode faithfully, so the tier declines
     (fail-open: no candidate, never an exception).
     """
+    rows = normalizers.normalize(parsed)
+    if rows is not None:
+        return rows
     if isinstance(parsed, dict):
-        items = _flatten_keyed(parsed) or [parsed]
+        items: List[dict] = [parsed]
     elif isinstance(parsed, (list, tuple)):
         items = list(parsed)
     else:
@@ -159,35 +151,119 @@ def _project(cols: List[str], profile: str) -> Tuple[List[str], Tuple[str, ...]]
     return kept, dropped
 
 
-def encode(parsed: Any, profile: str = "default") -> List[Encoded]:
-    """Encode pre-parsed rows compactly; empty list when *parsed* isn't
-    row-shaped. The caller owns the shrink gate and Candidate wrapping."""
-    items = _rows(parsed)
-    if items is None:
-        return []
+def _table_csv(items: List[dict], profile: str) -> Tuple[List[str], Tuple[str, ...]]:
     cols = _columns(items)
-    if not cols:
-        return []
     if profile == "default":
         kept, dropped = cols, ()
     else:
         kept, dropped = _project(cols, profile)
-    applied = profile if dropped else "default"
-
-    header = ",".join(_quote(c) for c in kept)
-    row_lines = [
+    lines = [",".join(_quote(c) for c in kept)] + [
         ",".join(_quote(_cell(row.get(c))) for c in kept) for row in items
     ]
-    marker = omission_marker(dropped) if dropped else None
+    if dropped:
+        lines.append(omission_marker(dropped))
+    return lines, dropped
 
-    csv_lines = [header] + row_lines
-    toon_lines = [f"[{len(items)}]{{{header}}}:"] + [
-        "  " + line for line in row_lines
-    ]
-    if marker:
-        csv_lines.append(marker)
-        toon_lines.append(marker)
-    return [
-        ("\n".join(csv_lines), "parsed:csv", dropped, applied),
-        ("\n".join(toon_lines), "parsed:toon", dropped, applied),
-    ]
+
+def _section_label(key: str) -> str:
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_.-]*$", key):
+        return key
+    return json.dumps(key, separators=(",", ":"))
+
+
+def _section_lines(
+    mapping: dict, profile: str, depth: int = 0
+) -> Optional[Tuple[List[str], List[str]]]:
+    if not all(isinstance(key, str) for key in mapping):
+        return None
+    indent = "  " * depth
+    lines: List[str] = []
+    dropped_fields: List[str] = []
+    for key, value in mapping.items():
+        label = _section_label(key)
+        table_items: Optional[List[dict]] = None
+        if isinstance(value, (list, tuple)):
+            table_items = _rows(value)
+        elif isinstance(value, dict):
+            table_items = normalizers.normalize(value)
+        if table_items:
+            table, dropped = _table_csv(table_items, profile)
+            lines.append(f"{indent}{label}:")
+            lines.extend(f"{indent}  {line}" for line in table)
+            for field in dropped:
+                if field not in dropped_fields:
+                    dropped_fields.append(field)
+            continue
+        if isinstance(value, dict) and value:
+            nested = _section_lines(value, profile, depth + 1)
+            if nested is None:
+                return None
+            nested_lines, nested_drops = nested
+            lines.append(f"{indent}{label}:")
+            lines.extend(nested_lines)
+            for field in nested_drops:
+                if field not in dropped_fields:
+                    dropped_fields.append(field)
+            continue
+        encoded = json.dumps(value, separators=(",", ":"), default=str)
+        lines.append(f"{indent}{label}:{encoded}")
+    return lines, dropped_fields
+
+
+def _encode_sections(parsed: Any, profile: str) -> Optional[Encoded]:
+    """Encode a mixed mapping as named scalar and tabular sections.
+
+    Tool responses commonly combine metadata with several row collections.
+    Treating that shape as one CSV row escapes the collections back into JSON,
+    so preserve the hierarchy and encode each collection header-once instead.
+    """
+    if (
+        not isinstance(parsed, dict)
+        or not parsed
+        or normalizers.normalize(parsed) is not None
+        or not any(isinstance(value, (dict, list, tuple)) for value in parsed.values())
+    ):
+        return None
+    sectioned = _section_lines(parsed, profile)
+    if sectioned is None:
+        return None
+    lines, dropped = sectioned
+    applied = profile if dropped else "default"
+    return "\n".join(lines), "parsed:sections", tuple(dropped), applied
+
+
+def encode(parsed: Any, profile: str = "default") -> List[Encoded]:
+    """Encode pre-parsed rows compactly; empty list when *parsed* isn't
+    row-shaped. The caller owns the shrink gate and Candidate wrapping."""
+    encoded: List[Encoded] = []
+    items = _rows(parsed)
+    if items is not None:
+        cols = _columns(items)
+        if cols:
+            if profile == "default":
+                kept, dropped = cols, ()
+            else:
+                kept, dropped = _project(cols, profile)
+            applied = profile if dropped else "default"
+
+            header = ",".join(_quote(c) for c in kept)
+            row_lines = [
+                ",".join(_quote(_cell(row.get(c))) for c in kept) for row in items
+            ]
+            marker = omission_marker(dropped) if dropped else None
+
+            csv_lines = [header] + row_lines
+            toon_lines = [f"[{len(items)}]{{{header}}}:"] + [
+                "  " + line for line in row_lines
+            ]
+            if marker:
+                csv_lines.append(marker)
+                toon_lines.append(marker)
+            encoded.extend([
+                ("\n".join(csv_lines), "parsed:csv", dropped, applied),
+                ("\n".join(toon_lines), "parsed:toon", dropped, applied),
+            ])
+    sections = _encode_sections(parsed, profile)
+    if sections is not None:
+        encoded.append(sections)
+    return encoded

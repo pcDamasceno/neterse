@@ -124,6 +124,76 @@ def _compress_my_thing(raw: str) -> str:
     return compact_or_raw
 ```
 
+## Add a vendor API shape (structured payloads, e.g. ACI / SD-WAN / Meraki)
+
+Controllers don't return CLI text — they return a vendor **envelope**
+(Cisco ACI wraps every object as `{class: {attributes: {...}}}` under an
+`imdata` list; other platforms differ, and the shape can change between
+API versions). The parsed tier (`neterse/parsed.py`) stays
+**vendor-agnostic** — it only knows how to encode rows — so envelope
+knowledge lives in its own isolated package, `neterse/normalizers/`, one
+module per style. Adding a vendor never touches `parsed.py`.
+
+A **normalizer** is a tiny fail-open sniffer:
+
+```python
+Callable[[Any], Optional[list[dict]]]
+```
+
+It receives an already-decoded structure and returns neterse's **canonical
+row shape** — a non-empty list of string-keyed dicts, one dict per row — or
+`None` for "not my shape" (raising also means "not mine").
+
+1. **Write the module** as `neterse/normalizers/<vendor>.py` with one
+   normalizer function. Scope it tightly — claim only the exact shape you
+   recognize, and keep any column you synthesize (the source key, the
+   class name) so the flattening stays lossless:
+
+```python
+# neterse/normalizers/acme_sdwan.py
+from typing import Any, List, Optional
+
+def data_list(value: Any) -> Optional[List[dict]]:
+    """Acme SD-WAN ``{"data": [ {...}, ... ]}`` -> its rows."""
+    if not isinstance(value, dict) or list(value) != ["data"]:
+        return None
+    rows = value["data"]
+    if not isinstance(rows, list) or not rows:
+        return None
+    if not all(isinstance(r, dict) and all(isinstance(k, str) for k in r)
+               for r in rows):
+        return None
+    return rows
+```
+
+2. **Register it** — import the function in
+   `neterse/normalizers/__init__.py` and add ONE line to the `NORMALIZERS`
+   list. Order is most-specific-first (vendor shapes before the generic
+   `keyed_dict`); a genuinely disjoint shape can go anywhere. That's the
+   whole wiring — no registry edit, no `parsed.py` edit.
+
+3. **Add a test** in `tests/test_normalizers.py`: one case that your shape
+   is claimed and normalized correctly, and one that a look-alike is
+   *declined* (`None`). The suite already pins the registry contract
+   (dispatch order, `register_normalizer` precedence, fail-open on a
+   raising or non-canonical normalizer), so you only test your shape.
+
+4. **Run `pytest`.** Once the payload is rows, every parsed-tier encoder
+   (`parsed:csv`, `parsed:toon`, `parsed:sections`) and profile applies for
+   free, and `compact(response)` / `optimize_parsed(response)` pick it up
+   automatically.
+
+Out-of-tree or a per-version override? No PR needed — `register_normalizer`
+inserts ahead of the built-ins:
+
+```python
+from neterse.normalizers import register_normalizer
+
+@register_normalizer
+def my_shape(value):
+    ...            # return list[dict] you recognize, else None
+```
+
 ## Development setup
 
 ```bash

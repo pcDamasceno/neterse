@@ -21,7 +21,8 @@ Public API:
   points for output that arrives ALREADY parsed (netmiko
   ``use_textfsm=True``, scrapli ``textfsm_parse_output()``, an API or
   gNMI call) with no raw CLI text in hand: candidates are gated against
-  the compact JSON a consumer would otherwise send, and
+    the compact JSON a consumer would otherwise send (including a
+    section-preserving candidate for mixed tool/API responses), and
   ``optimize_parsed`` returns the smallest of the two (strings pass
   through untouched — a parser's raw-text fallback is :func:`optimize`'s
   business).
@@ -77,6 +78,7 @@ from typing import Any, Optional, Tuple
 
 from . import parsed as _parsed_tier
 from . import sources as _sources
+from . import normalizers as _normalizers  # noqa: F401  (neterse.normalizers seam)
 from .registry import (  # noqa: F401  (re-exported)
     Entry,
     REGISTRY,
@@ -239,8 +241,11 @@ def compact(
       the ``textfsm`` extra installed ntc-templates parses it so both
       tiers compete.
     * **structured rows** — netmiko ``use_textfsm=True``, NAPALM
-      getters, gNMI, plain dicts/lists: re-encoded header-once against
-      their compact-JSON baseline (:func:`optimize_parsed`).
+      getters, gNMI, a controller's JSON (ACI ``imdata`` and other
+      vendor envelopes are first turned into rows by
+      :mod:`neterse.normalizers`), plain dicts/lists: re-encoded
+      header-once against their compact-JSON baseline
+      (:func:`optimize_parsed`).
 
     Fail-open like everything else: whatever cannot shrink comes back
     unchanged, and no data path raises. (Misuse is different — a

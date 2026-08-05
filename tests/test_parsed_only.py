@@ -12,7 +12,8 @@ import json
 import pytest
 
 from neterse import optimize_parsed, render_parsed
-from neterse.parsed import encode, _flatten_keyed, _rows
+from neterse.normalizers import class_attributes, keyed_dict
+from neterse.parsed import encode, _rows
 
 ROWS = [
     {"interface": "GigabitEthernet0/0", "ip": "10.0.0.1", "status": "up"},
@@ -208,7 +209,7 @@ def test_scalar_or_mixed_valued_dict_stays_a_single_row():
     facts = {"hostname": "r1", "os": "9.3", "interface_list": ["Eth1/1"]}
     snmp = {"chassis_id": "abc", "community": {"public": {"mode": "ro"}}}
     for obj in (facts, snmp):
-        assert _flatten_keyed(obj) is None
+        assert keyed_dict(obj) is None
         assert _rows(obj) == [obj]
 
 
@@ -238,7 +239,67 @@ def test_dict_with_a_non_dict_or_exotic_value_is_not_flattened():
     the whole mapping from flattening — it falls back to the single-row
     path (asserted on the helpers, deterministic regardless of shrink)."""
     partial = {"a": {"x": 1}, "b": "scalar"}            # mixed value types
-    assert _flatten_keyed(partial) is None
+    assert keyed_dict(partial) is None
     assert _rows(partial) == [partial]                  # single row, not "key,x"
     exotic = {"a": {1: "int-key"}, "b": {2: "int-key"}}  # inner keys not str
-    assert _flatten_keyed(exotic) is None
+    assert keyed_dict(exotic) is None
+
+
+# ---------------------------------------------------------------------------
+# Controller APIs and mixed MCP/tool responses
+# ---------------------------------------------------------------------------
+
+ACI_IMDATA = [
+    {"fabricNode": {"attributes": {
+        "id": "101", "name": "leaf101", "fabricSt": "active",
+    }}},
+    {"fabricNode": {"attributes": {
+        "id": "102", "name": "leaf102", "fabricSt": "active",
+    }}},
+]
+
+
+def test_class_attributes_wrappers_flatten_to_rows():
+    candidates = render_parsed(ACI_IMDATA)
+    assert {candidate.source for candidate in candidates} == {
+        "parsed:csv", "parsed:toon",
+    }
+    csv = next(candidate for candidate in candidates
+               if candidate.source == "parsed:csv")
+    assert csv.text.splitlines() == [
+        "_class,id,name,fabricSt",
+        "fabricNode,101,leaf101,active",
+        "fabricNode,102,leaf102,active",
+    ]
+
+
+def test_wrapped_rows_with_children_are_not_flattened():
+    row = {"fabricNode": {"attributes": {"id": "101"}, "children": []}}
+    assert class_attributes([row]) is None
+    assert _rows([row]) == [row]
+
+
+def test_mcp_api_envelope_compacts_as_named_sections():
+    response = {
+        "endpoint": "/api/node/class/fabricNode.json",
+        "method": "GET",
+        "data": {"totalCount": "2", "imdata": ACI_IMDATA},
+        "status": "success",
+    }
+    candidates = render_parsed(response)
+    sections = next(candidate for candidate in candidates
+                    if candidate.source == "parsed:sections")
+    assert sections.text == "\n".join([
+        'endpoint:"/api/node/class/fabricNode.json"',
+        'method:"GET"',
+        "data:",
+        '  totalCount:"2"',
+        "  imdata:",
+        "    _class,id,name,fabricSt",
+        "    fabricNode,101,leaf101,active",
+        "    fabricNode,102,leaf102,active",
+        'status:"success"',
+    ])
+    baseline = _compact_json(response)
+    assert len(sections.text) < len(baseline)
+    assert optimize_parsed(response) == sections.text
