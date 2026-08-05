@@ -303,3 +303,54 @@ def test_mcp_api_envelope_compacts_as_named_sections():
     baseline = _compact_json(response)
     assert len(sections.text) < len(baseline)
     assert optimize_parsed(response) == sections.text
+
+
+def test_nested_children_tabulate_as_indented_subtables():
+    """ACI include_children/include_faults responses attach a heterogeneous
+    collection to each object (an ``_children`` list of wrapped MOs). The
+    sections encoder tabulates it recursively instead of JSON-blobbing it, so
+    subtree responses shrink instead of passing through unchanged."""
+    response = {
+        "status": "success",
+        "items": [
+            {
+                "dn": "uni/tn-A/ap-x/epg-1", "name": "epg1", "_class": "fvAEPg",
+                "_children": [
+                    {"fvRsBd": {"attributes": {"tnFvBDName": "BD1", "state": "formed"}}},
+                    {"fvRsDomAtt": {"attributes": {"tDn": "uni/phys-P", "state": "formed"}}},
+                ],
+            },
+            {
+                "dn": "uni/tn-A/ap-x/epg-2", "name": "epg2", "_class": "fvAEPg",
+                "_children": [
+                    {"fvRsBd": {"attributes": {"tnFvBDName": "BD2", "state": "formed"}}},
+                ],
+            },
+        ],
+    }
+    best = optimize_parsed(response)
+    baseline = _compact_json(response)
+    assert 0 < len(best) < len(baseline)                # subtree now shrinks
+    # parent flat table excludes the nested collection from its columns...
+    assert "dn,name,_class" in best
+    # ...and renders it as an indented, unwrapped sub-table per parent row
+    assert best.count("_children:") == 2
+    assert "_class,tnFvBDName,state" in best            # child header, unwrapped
+    for token in ("epg1", "epg2", "BD1", "BD2", "uni/phys-P"):
+        assert token in best
+    assert '"attributes"' not in best                   # tabulated, not JSON-blobbed
+
+
+def test_flat_rows_are_unaffected_by_nested_handling():
+    """The nesting path must be inert for ordinary flat tables: rows with no
+    normalizer-recognized nested collection render byte-identically to before
+    (the section envelope test pins the exact bytes; this pins the invariant
+    that adding a scalar-only nested-looking value doesn't trip it)."""
+    response = {"items": [
+        {"dn": "a", "state": "up", "extra": "[]"},      # string, not a real list
+        {"dn": "b", "state": "down", "extra": "{}"},
+    ]}
+    best = optimize_parsed(response)
+    assert "items:" in best
+    assert "dn,state,extra" in best                     # extra stays a column
+    assert "a,up,[]" in best and "b,down,{}" in best

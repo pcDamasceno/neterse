@@ -33,7 +33,9 @@ returned — candidates, not policy:
     A hierarchy-preserving document for tool/API responses that mix scalar
     metadata, nested mappings and multiple row collections. Section names and
     scalar values remain in place while each row collection becomes a compact
-    header-once table.
+    header-once table — including collections nested INSIDE a row (an ACI
+    ``_children``/``_faults`` subtree), which are tabulated recursively as
+    indented sub-tables rather than JSON-blobbed.
 
 Vendor/API envelopes (ACI ``imdata``, NAPALM keyed getters, future
 SD-WAN / Meraki styles) are turned into canonical rows by
@@ -165,6 +167,64 @@ def _table_csv(items: List[dict], profile: str) -> Tuple[List[str], Tuple[str, .
     return lines, dropped
 
 
+def _table_lines(
+    items: List[dict], profile: str
+) -> Tuple[List[str], Tuple[str, ...]]:
+    """Header-once table for *items*, but with any nested row-collection
+    tabulated as an indented sub-table instead of a JSON-blobbed cell.
+
+    A cell whose value another normalizer claims (an ACI ``_children`` /
+    ``_faults`` list of wrapped objects, a keyed sub-map — anything
+    :func:`neterse.normalizers.normalize` recognizes) is a whole table in
+    disguise; flattening it to one JSON string is exactly what loses to
+    compact JSON on subtree responses. Here such cells become their own
+    indented sub-table under each row, recursively. Rows with NO such
+    nesting fall through to :func:`_table_csv` byte-for-byte, so the common
+    flat-table case is untouched. Vendor-agnostic: it asks ``normalize``
+    what nests, it never names a vendor.
+    """
+    flats: List[dict] = []
+    nested_per_row: List[List[Tuple[str, List[dict]]]] = []
+    any_nested = False
+    for row in items:
+        flat: dict = {}
+        nested: List[Tuple[str, List[dict]]] = []
+        for key, value in row.items():
+            sub = (
+                normalizers.normalize(value)
+                if isinstance(value, (list, tuple, dict)) else None
+            )
+            if sub is not None:
+                nested.append((key, sub))
+                any_nested = True
+            else:
+                flat[key] = value
+        flats.append(flat)
+        nested_per_row.append(nested)
+    if not any_nested:
+        return _table_csv(items, profile)
+
+    cols = _columns(flats)
+    if profile == "default":
+        kept, dropped = cols, ()
+    else:
+        kept, dropped = _project(cols, profile)
+    dropped_all: List[str] = list(dropped)
+    lines = [",".join(_quote(c) for c in kept)]
+    for flat, nested in zip(flats, nested_per_row):
+        lines.append(",".join(_quote(_cell(flat.get(c))) for c in kept))
+        for key, subrows in nested:
+            sub_lines, sub_dropped = _table_lines(subrows, profile)
+            lines.append("  " + _section_label(key) + ":")
+            lines.extend("    " + line for line in sub_lines)
+            for field in sub_dropped:
+                if field not in dropped_all:
+                    dropped_all.append(field)
+    if dropped:
+        lines.append(omission_marker(dropped))
+    return lines, tuple(dropped_all)
+
+
 def _section_label(key: str) -> str:
     if re.match(r"^[A-Za-z_][A-Za-z0-9_.-]*$", key):
         return key
@@ -187,7 +247,7 @@ def _section_lines(
         elif isinstance(value, dict):
             table_items = normalizers.normalize(value)
         if table_items:
-            table, dropped = _table_csv(table_items, profile)
+            table, dropped = _table_lines(table_items, profile)
             lines.append(f"{indent}{label}:")
             lines.extend(f"{indent}  {line}" for line in table)
             for field in dropped:
@@ -216,6 +276,9 @@ def _encode_sections(parsed: Any, profile: str) -> Optional[Encoded]:
     Tool responses commonly combine metadata with several row collections.
     Treating that shape as one CSV row escapes the collections back into JSON,
     so preserve the hierarchy and encode each collection header-once instead.
+    Row-collections nested INSIDE a row (an ACI ``_children``/``_faults``
+    subtree) are tabulated recursively rather than JSON-blobbed, via
+    :func:`_table_lines`.
     """
     if (
         not isinstance(parsed, dict)
