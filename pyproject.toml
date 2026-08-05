@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # by an abandoned 2019 package. Distribution, import, and CLI
 # share the one name.
 name = "neterse"
-version = "0.1.0"                     # keep in lockstep with neterse.__version__
+version = "0.1.1"                     # keep in lockstep with neterse.__version__
 description = "neterse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
 readme = "README.md"
 requires-python = ">=3.9"
