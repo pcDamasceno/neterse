@@ -247,6 +247,15 @@ SPECS: list = [
         'dropped_fields': (),
     },
     {
+        'id': 'cisco_nxos/show_ip_arp',
+        'command': '^show\\s+ip\\s+arp(?:\\s+vrf\\s+\\S+)?\\s*$',
+        'platforms': 'nx',
+        'strategy': 'line_regex_table',
+        'row': '^(\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)(?:\\s+(.+))?$',
+        'header': 'address,age,mac,interface,flags',
+        'dropped_fields': (),
+    },
+    {
         'id': 'juniper_junos/show_interfaces_terse',
         'command': '^show\\s+int(?:erfaces?)?\\s+terse(?:\\s+\\S+)?\\s*$',
         'platforms': 'junos|juniper',

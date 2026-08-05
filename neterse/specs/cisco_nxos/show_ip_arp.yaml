@@ -1,0 +1,13 @@
+# show ip arp / show ip arp vrf ... (NX-OS) -> CSV. Drops the flag
+# legend, the "IP ARP Table for <context>" caption and the entry count
+# (all re-derivable), keeping every column of the table itself. The
+# Flags column is usually empty but data-bearing (FHRP/CFSoE/throttled/
+# static-down), so it is kept, not dropped.
+command: '^show\s+ip\s+arp(?:\s+vrf\s+\S+)?\s*$'
+platforms: 'nx'
+strategy: line_regex_table
+#      1: address   2: age   3: MAC (or INCOMPLETE)   4: interface
+#      5: flags (optional; * + # CP PS RO D ...)
+row: '^(\d+\.\d+\.\d+\.\d+)\s+(\S+)\s+(\S+)\s+(\S+)(?:\s+(.+))?$'
+header: address,age,mac,interface,flags
+dropped_fields: []

@@ -181,6 +181,7 @@ REGISTRY: List[Entry] = [
     # -- Live-lab gap fixes (bgp_fundamentals verification, decision 25+):
     #    still strictly appended, same tie-break reasoning as above.
     _spec_entry(_BY_ID["cisco_ios/show_cdp_neighbors"]),
+    _spec_entry(_BY_ID["cisco_nxos/show_ip_arp"]),
     _code_entry(
         # Block-structured (one "Routing Protocol is ..." block per
         # process) — no table strategy fits; unknown lines are preserved
