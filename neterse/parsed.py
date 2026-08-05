@@ -7,11 +7,14 @@ fields, emit the keys once, then one delimited line per row. This module
 is that transform — it knows nothing about commands or vendors, so one
 encoder covers every command those parsers handle.
 
-``encode(parsed, profile)`` accepts a list of dicts (or a single dict —
-one row) and returns encoder outputs as plain tuples; ``neterse.render``
-wraps them into :class:`~neterse.Candidate` objects and applies the usual
-shrink gate against the raw output. Two encodings are emitted and BOTH
-are returned — candidates, not policy:
+``encode(parsed, profile)`` accepts a list of dicts, a single dict (one
+row), or a dict keyed by name whose values are all dicts — the
+NAPALM/OpenConfig ``{interface: {...}}`` shape, flattened to one row per
+entry with the outer key kept as a leading column — and returns encoder
+outputs as plain tuples; ``neterse.render`` wraps them into
+:class:`~neterse.Candidate` objects and applies the usual shrink gate
+against the raw output. Two encodings are emitted and BOTH are
+returned — candidates, not policy:
 
 ``parsed:csv``
     Header-once CSV. Nearly always the smallest faithful encoding of a
@@ -66,15 +69,40 @@ PROFILES = {
 }
 
 
+def _flatten_keyed(mapping: dict) -> Optional[List[dict]]:
+    """NAPALM/OpenConfig shape ``{name: {...}}`` → one row per entry, the
+    outer key kept as a leading ``key`` column, so a dict keyed by
+    interface / VLAN / user encodes as a table instead of one
+    unshrinkable mega-row. Declines (None) unless EVERY value is a
+    string-keyed dict — a scalar or mixed dict (get_facts, get_config)
+    stays a single row; the outer keys themselves may be non-string (int
+    VLAN ids are fine). Lossless: the key becomes a cell, so nothing is
+    dropped. The ``key`` column name is prefixed with underscores as
+    needed so it never shadows an inner field.
+    """
+    if not mapping or not all(
+        isinstance(v, dict) and all(isinstance(k, str) for k in v)
+        for v in mapping.values()
+    ):
+        return None
+    keycol = "key"
+    inner = {k for v in mapping.values() for k in v}
+    while keycol in inner:
+        keycol = "_" + keycol
+    return [{keycol: name, **attrs} for name, attrs in mapping.items()]
+
+
 def _rows(parsed: Any) -> Optional[List[dict]]:
     """Normalize *parsed* to a non-empty list of str-keyed dicts, or None.
 
-    Anything else — scalars, strings, mixed lists, exotic keys — is not
-    row-shaped data we can encode faithfully, so the tier declines
+    A dict keyed by name whose values are all dicts is flattened to one
+    row per entry (:func:`_flatten_keyed`); any other dict is a single
+    row. Anything else — scalars, strings, mixed lists, exotic keys — is
+    not row-shaped data we can encode faithfully, so the tier declines
     (fail-open: no candidate, never an exception).
     """
     if isinstance(parsed, dict):
-        items = [parsed]
+        items = _flatten_keyed(parsed) or [parsed]
     elif isinstance(parsed, (list, tuple)):
         items = list(parsed)
     else:

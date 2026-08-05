@@ -121,6 +121,24 @@ def test_napalm_style_getter_dict_routes_to_rows_path():
     assert compact(getter) == optimize_parsed(getter)
 
 
+def test_napalm_keyed_getter_flattens_and_shrinks():
+    """The dominant NAPALM getter shape ``{name: {...}}`` (get_interfaces,
+    get_optics, get_users) must compress end-to-end with no caller-side
+    flattening: the outer key becomes a leading ``key`` column."""
+    getter = {
+        "Ethernet1/1": {"is_up": True, "description": "uplink", "mtu": 1500},
+        "Ethernet1/2": {"is_up": False, "description": "core", "mtu": 9216},
+    }
+    import json
+
+    baseline = json.dumps(getter, separators=(",", ":"), default=str)
+    out = compact(getter)
+    assert len(out) < len(baseline)                     # actually shrinks now
+    assert out.splitlines()[0].startswith("key,")       # key-led table
+    for name in getter:
+        assert name in out                              # nothing dropped
+
+
 # ---------------------------------------------------------------------------
 # Connections (anything with send_command)
 # ---------------------------------------------------------------------------

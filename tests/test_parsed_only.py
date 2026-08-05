@@ -12,7 +12,7 @@ import json
 import pytest
 
 from neterse import optimize_parsed, render_parsed
-from neterse.parsed import encode
+from neterse.parsed import encode, _flatten_keyed, _rows
 
 ROWS = [
     {"interface": "GigabitEthernet0/0", "ip": "10.0.0.1", "status": "up"},
@@ -160,3 +160,85 @@ def test_unknown_profile_degrades_to_complete_default():
     assert [c.text for c in render_parsed(ROWS, profile="nope")] == [
         c.text for c in render_parsed(ROWS)
     ]
+
+
+# ---------------------------------------------------------------------------
+# Keyed-dict flattening (the dominant NAPALM getter shape: {name: {...}})
+# ---------------------------------------------------------------------------
+
+# get_interfaces / get_optics / get_users all return this: a dict keyed by
+# name whose values are uniform attribute dicts. Left as one mega-row it never
+# shrinks; flattened it is an ordinary table.
+KEYED_GETTER = {
+    "Ethernet1/1": {"is_up": True, "description": "uplink", "mtu": 1500},
+    "Ethernet1/2": {"is_up": False, "description": "", "mtu": 9216},
+}
+
+
+def test_keyed_dict_flattens_to_one_row_per_entry():
+    candidates = render_parsed(KEYED_GETTER)
+    assert {c.source for c in candidates} == {"parsed:csv", "parsed:toon"}
+    csv = next(c for c in candidates if c.source == "parsed:csv")
+    lines = csv.text.splitlines()
+    assert lines[0] == "key,is_up,description,mtu"      # outer key leads
+    assert lines[1] == "Ethernet1/1,true,uplink,1500"
+    assert lines[2] == "Ethernet1/2,false,,9216"
+    assert len(lines) == 1 + len(KEYED_GETTER)
+
+
+def test_keyed_flatten_beats_the_nested_json_baseline_losslessly():
+    baseline = _compact_json(KEYED_GETTER)
+    best = optimize_parsed(KEYED_GETTER)
+    assert 0 < len(best) < len(baseline)
+    for c in render_parsed(KEYED_GETTER):
+        assert c.dropped_fields == ()                   # key kept → lossless
+        assert c.profile == "default"
+    # every outer name and every inner value survives the round trip
+    for name, attrs in KEYED_GETTER.items():
+        assert name in best
+        for val in attrs.values():
+            if val not in (True, False, ""):
+                assert str(val) in best
+
+
+def test_scalar_or_mixed_valued_dict_stays_a_single_row():
+    """get_facts / get_snmp_information shapes — not every value is a dict —
+    must NOT be flattened; _rows keeps them as one row keyed by their own
+    fields (asserted on the helper, since single-row CSV need not shrink)."""
+    facts = {"hostname": "r1", "os": "9.3", "interface_list": ["Eth1/1"]}
+    snmp = {"chassis_id": "abc", "community": {"public": {"mode": "ro"}}}
+    for obj in (facts, snmp):
+        assert _flatten_keyed(obj) is None
+        assert _rows(obj) == [obj]
+
+
+def test_flatten_handles_non_string_outer_keys():
+    """VLAN ids arrive as ints; without flattening the tier declines
+    (int keys aren't str-keyed rows), so this is pure upside."""
+    vlans = {1: {"name": "default"}, 100: {"name": "data"}}
+    candidates = render_parsed(vlans)
+    assert candidates, "int-keyed dict should now flatten and shrink"
+    csv = next(c for c in candidates if c.source == "parsed:csv")
+    lines = csv.text.splitlines()
+    assert lines[0] == "key,name"
+    assert lines[1] == "1,default"
+    assert lines[2] == "100,data"
+
+
+def test_key_column_name_avoids_colliding_with_an_inner_field():
+    keyed = {"a": {"key": "X", "v": 1}, "b": {"key": "Y", "v": 2}}
+    csv = next(c for c in render_parsed(keyed) if c.source == "parsed:csv")
+    lines = csv.text.splitlines()
+    assert lines[0] == "_key,key,v"                     # underscore to dodge
+    assert lines[1] == "a,X,1"
+
+
+def test_dict_with_a_non_dict_or_exotic_value_is_not_flattened():
+    """One non-dict value, or a dict with non-string inner keys, disqualifies
+    the whole mapping from flattening — it falls back to the single-row
+    path (asserted on the helpers, deterministic regardless of shrink)."""
+    partial = {"a": {"x": 1}, "b": "scalar"}            # mixed value types
+    assert _flatten_keyed(partial) is None
+    assert _rows(partial) == [partial]                  # single row, not "key,x"
+    exotic = {"a": {1: "int-key"}, "b": {2: "int-key"}}  # inner keys not str
+    assert _flatten_keyed(exotic) is None
