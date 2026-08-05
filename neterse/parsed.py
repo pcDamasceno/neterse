@@ -21,13 +21,32 @@ returned — candidates, not policy:
     flat uniform table.
 
 ``parsed:toon``
-    TOON-style tabular block (``[N]{fields}:`` + indented rows). A few
+    Spec-compliant TOON tabular form (SPEC.md §9.3: root
+    ``[N]{fields}:`` header, comma delimiter, two-space rows,
+    ``null``/``true``/``false`` literals, delimiter-aware quoting,
+    nested-uniform columns folded into ``field{sub,...}`` groups). A few
     percent larger than CSV, but the explicit row count lets a consumer
-    (or the model) detect truncation, which some policies value above
-    minimum size. Uniform flat rows only — nested values are JSON-encoded
-    into their cell, and rows with differing keys fall back to the
-    unioned-column table with empty cells (a pragmatic extension of
-    strict TOON; full spec compliance is a Phase-4 concern).
+    (or the model) detect truncation, and the document round-trips
+    through any conforming TOON decoder. Emitted only when the rows are
+    §9.3-eligible (identical key sets, no array cells, no empty
+    objects) and no profile projection applied — a conforming document
+    cannot carry the omission marker (encoders MUST NOT emit comments,
+    nor trailing content after the root form), so lossy renderings stay
+    CSV's business.
+
+``parsed:gcf``
+    Spec-compliant GCF generic profile (SPEC v3.4.1: the required
+    ``GCF profile=generic`` preamble, a ``## [N]{fields}`` section
+    header, pipe-delimited rows, ``-`` for null vs ``~`` for
+    field-absent, JSON-grammar quoting, nested-uniform dict columns
+    flattened into quoted ``parent>child`` path columns). Slightly
+    larger than CSV on flat tables, but it distinguishes null from
+    missing — which CSV's empty cell conflates — and interoperates with
+    the GCF tooling ecosystem (MCP proxies, decoders in six languages).
+    Emitted only when every cell is representable in a conforming
+    generic-profile table (no array cells, no non-uniform nesting) and
+    no profile projection applied, for the same reason as
+    ``parsed:toon``.
 
 ``parsed:sections``
     A hierarchy-preserving document for tool/API responses that mix scalar
@@ -58,6 +77,7 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import Decimal
 from typing import Any, List, Optional, Tuple
 
 from . import normalizers
@@ -138,6 +158,281 @@ def _quote(s: str) -> str:
     if "," in s or '"' in s or "\n" in s:
         return '"' + s.replace('"', '""') + '"'
     return s
+
+
+# ---------------------------------------------------------------------------
+# Spec-compliant interop encodings (parsed:toon / parsed:gcf)
+#
+# TOON (toon-format SPEC.md, Working Draft 4.1) and GCF
+# (blackwell-systems/gcf SPEC.md, v3.4.1 Stable) share their scalar
+# grammar: JSON-style quoted strings, lowercase true/false, canonical
+# decimal numbers. They differ in structure (indented comma rows under a
+# ``[N]{fields}:`` header vs pipe rows under a ``## [N]{fields}`` section)
+# and in null/missing handling (TOON: ``null``, absent keys ineligible;
+# GCF: ``-`` null vs ``~`` absent). Both are emitted ONLY when the result
+# is a conforming document — anything unrepresentable declines, fail-open,
+# and the CSV/sections candidates carry on.
+# ---------------------------------------------------------------------------
+
+_TOON_BARE_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*$")
+_GCF_BARE_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# A string a decoder would read back as a number — must be quoted to stay
+# a string (JSON number grammar, both specs).
+_NUMBER_LIKE = re.compile(r"^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$")
+# C0 + DEL + C1: both specs require these escaped inside quoted strings.
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_TOON_UNSAFE = re.compile(r'[:"\\\[\]{}]')
+_EXPONENT_FORM = re.compile(r"^(-?[0-9.]+)[eE]([+-]?)0*(\d+)$")
+
+# Sentinel for a key absent from a row (GCF distinguishes it from null).
+_ABSENT = object()
+
+
+def _escaped(s: str) -> str:
+    """JSON-grammar quoted string, shared by both specs: short escapes
+    for the common controls, ``\\uXXXX`` for the rest (DEL/C1 included,
+    which ``json.dumps`` leaves raw), other unicode literal."""
+    body = json.dumps(s, ensure_ascii=False)[1:-1]
+    return '"' + _CONTROL_CHARS.sub(
+        lambda m: "\\u%04x" % ord(m.group()), body
+    ) + '"'
+
+
+def _number_literal(value) -> Optional[str]:
+    """Canonical number under both specs' shared rules: plain decimal
+    (integer form when the fraction is zero) inside ``[1e-6, 1e21)``,
+    exponent form outside, never a leading/trailing zero. ``None`` for
+    non-finite values — the caller maps those to its null."""
+    if isinstance(value, int):
+        return str(value)
+    if value != value or value in (float("inf"), float("-inf")):
+        return None
+    if value == int(value) and abs(value) < 1e21:
+        return str(int(value))
+    text = repr(value)
+    match = _EXPONENT_FORM.match(text)
+    if match and 1e-6 <= abs(value) < 1e21:
+        text = format(Decimal(text), "f")
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+    elif match:
+        text = match.group(1) + "e" + (
+            "-" if match.group(2) == "-" else ""
+        ) + match.group(3)
+    return text
+
+
+def _toon_string(s: str) -> str:
+    if (
+        not s
+        or s != s.strip()
+        or s in ("true", "false", "null")
+        or _NUMBER_LIKE.match(s)
+        or "," in s
+        or _TOON_UNSAFE.search(s)
+        or _CONTROL_CHARS.search(s)
+        or s[0] in "-#"
+    ):
+        return _escaped(s)
+    return s
+
+
+def _toon_scalar(value: Any) -> Optional[str]:
+    """One encoded TOON cell, or ``None`` when *value* has no primitive
+    encoding (the whole array then declines tabular form)."""
+    if value is None:
+        return "null"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, (int, float)):
+        literal = _number_literal(value)
+        return "null" if literal is None else literal
+    if isinstance(value, str):
+        return _toon_string(value)
+    if isinstance(value, (dict, list, tuple)):
+        return None
+    try:
+        return _toon_string(str(value))     # datetime & friends, like _cell
+    except Exception:
+        return None
+
+
+def _toon_columns(
+    items: List[dict], keys: List[str]
+) -> Optional[Tuple[str, List[Tuple[str, ...]]]]:
+    """§9.3 eligibility walk: the encoded header field list and the
+    depth-first leaf paths, or ``None`` when the rows disqualify (a key
+    missing from some row, an array or empty-object cell, a column mixing
+    objects with anything else — recursively for nested field groups)."""
+    fields: List[str] = []
+    paths: List[Tuple[str, ...]] = []
+    for key in keys:
+        if any(key not in row for row in items):
+            return None
+        values = [row[key] for row in items]
+        if all(isinstance(v, dict) for v in values):
+            if any(not v for v in values):
+                return None                     # empty object cell
+            subkeys = list(values[0])
+            if not all(isinstance(k, str) for k in subkeys):
+                return None
+            if any(set(v) != set(subkeys) for v in values):
+                return None                     # non-uniform nesting
+            sub = _toon_columns(values, subkeys)
+            if sub is None:
+                return None
+            subfields, subpaths = sub
+            fields.append(
+                (key if _TOON_BARE_KEY.match(key) else _escaped(key))
+                + "{" + subfields + "}"
+            )
+            paths.extend((key,) + p for p in subpaths)
+        else:
+            if any(isinstance(v, (dict, list, tuple)) for v in values):
+                return None                     # array cell / mixed column
+            fields.append(key if _TOON_BARE_KEY.match(key) else _escaped(key))
+            paths.append((key,))
+    return ",".join(fields), paths
+
+
+def _toon_encoded(
+    items: List[dict], kept: List[str], dropped: Tuple[str, ...]
+) -> Optional[Encoded]:
+    """Spec-compliant TOON root tabular document, or ``None``. Declines
+    under an applied projection: a conforming encoder may emit neither
+    comment lines nor trailing content after the root form, so there is
+    no way to carry the omission marker in-document."""
+    if dropped:
+        return None
+    columns = _toon_columns(items, kept)
+    if columns is None:
+        return None
+    fields, paths = columns
+    lines = [f"[{len(items)}]{{{fields}}}:"]
+    for row in items:
+        cells = []
+        for path in paths:
+            value: Any = row
+            for step in path:
+                value = value[step]
+            cell = _toon_scalar(value)
+            if cell is None:
+                return None
+            cells.append(cell)
+        lines.append("  " + ",".join(cells))
+    return "\n".join(lines), "parsed:toon", (), "default"
+
+
+def _gcf_string(s: str) -> str:
+    if (
+        not s
+        or s != s.strip()
+        or s in ("-", "~", "^", "true", "false")
+        or _NUMBER_LIKE.match(s)
+        or "|" in s
+        or '"' in s
+        or "\\" in s
+        or _CONTROL_CHARS.search(s)
+    ):
+        return _escaped(s)
+    return s
+
+
+def _gcf_scalar(value: Any) -> Optional[str]:
+    """One encoded GCF cell (``-`` null, ``~`` absent), or ``None`` when
+    *value* cannot appear in a conforming generic-profile row."""
+    if value is _ABSENT:
+        return "~"
+    if value is None:
+        return "-"
+    if value is True:
+        return "true"
+    if value is False:
+        return "false"
+    if isinstance(value, (int, float)):
+        literal = _number_literal(value)
+        return "-" if literal is None else literal
+    if isinstance(value, str):
+        return _gcf_string(value)
+    if isinstance(value, (dict, list, tuple)):
+        return None
+    try:
+        return _gcf_string(str(value))
+    except Exception:
+        return None
+
+
+def _gcf_leaf_paths(
+    items: List[dict], keys: List[str]
+) -> Optional[List[Tuple[str, ...]]]:
+    """Column paths for the generic profile, flattening nested-uniform
+    dict columns into ``parent>child`` paths (§7.4.6: identical key sets
+    and scalar leaves only — encoders MUST NOT flatten anything else).
+    ``None`` when any column is unrepresentable: an array cell, a dict
+    column that is absent somewhere or non-uniform, a source field name
+    containing the reserved ``>``."""
+    paths: List[Tuple[str, ...]] = []
+    for key in keys:
+        if ">" in key:
+            return None                         # reserved for path columns
+        present = [row[key] for row in items if key in row]
+        if any(isinstance(v, dict) for v in present):
+            if len(present) != len(items):
+                return None                     # parent absent in some row
+            if not all(isinstance(v, dict) and v for v in present):
+                return None
+            subkeys = list(present[0])
+            if not all(isinstance(k, str) for k in subkeys):
+                return None
+            if any(set(v) != set(subkeys) for v in present):
+                return None
+            sub = _gcf_leaf_paths(present, subkeys)
+            if sub is None:
+                return None
+            paths.extend((key,) + p for p in sub)
+        elif any(isinstance(v, (list, tuple)) for v in present):
+            return None
+        else:
+            paths.append((key,))
+    return paths
+
+
+def _gcf_encoded(
+    items: List[dict], kept: List[str], dropped: Tuple[str, ...]
+) -> Optional[Encoded]:
+    """Spec-compliant GCF generic-profile document, or ``None``. Declines
+    under an applied projection for the same reason as TOON: nothing in a
+    conforming document can carry the omission marker."""
+    if dropped:
+        return None
+    paths = _gcf_leaf_paths(items, kept)
+    if paths is None or not paths:
+        return None
+    names = []
+    for path in paths:
+        name = ">".join(path)
+        names.append(name if _GCF_BARE_KEY.match(name) else _escaped(name))
+    lines = [
+        "GCF profile=generic",
+        "## [%d]{%s}" % (len(items), ",".join(names)),
+    ]
+    for row in items:
+        cells = []
+        for path in paths:
+            value: Any = row
+            for step in path:
+                if not isinstance(value, dict) or step not in value:
+                    value = _ABSENT
+                    break
+                value = value[step]
+            cell = _gcf_scalar(value)
+            if cell is None:
+                return None
+            cells.append(cell)
+        lines.append("|".join(cells))
+    return "\n".join(lines), "parsed:gcf", (), "default"
 
 
 def _project(cols: List[str], profile: str) -> Tuple[List[str], Tuple[str, ...]]:
@@ -313,19 +608,16 @@ def encode(parsed: Any, profile: str = "default") -> List[Encoded]:
             row_lines = [
                 ",".join(_quote(_cell(row.get(c))) for c in kept) for row in items
             ]
-            marker = omission_marker(dropped) if dropped else None
-
             csv_lines = [header] + row_lines
-            toon_lines = [f"[{len(items)}]{{{header}}}:"] + [
-                "  " + line for line in row_lines
-            ]
-            if marker:
-                csv_lines.append(marker)
-                toon_lines.append(marker)
-            encoded.extend([
-                ("\n".join(csv_lines), "parsed:csv", dropped, applied),
-                ("\n".join(toon_lines), "parsed:toon", dropped, applied),
-            ])
+            if dropped:
+                csv_lines.append(omission_marker(dropped))
+            encoded.append(("\n".join(csv_lines), "parsed:csv", dropped, applied))
+            toon = _toon_encoded(items, kept, dropped)
+            if toon is not None:
+                encoded.append(toon)
+            gcf = _gcf_encoded(items, kept, dropped)
+            if gcf is not None:
+                encoded.append(gcf)
     sections = _encode_sections(parsed, profile)
     if sections is not None:
         encoded.append(sections)

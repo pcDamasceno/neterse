@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased
+
+### Spec-compliant interop candidates: TOON 4.1 and GCF v3.4.1 (decision 35)
+
+- **`parsed:toon` is now real TOON** (toon-format SPEC.md 4.1, §9.3 root
+  tabular form), not "TOON-style": strict eligibility (identical key
+  sets, no array or empty-object cells), `null`/`true`/`false` literals,
+  delimiter-aware JSON-grammar quoting — numeric-lookalike strings
+  (TextFSM's entire output) quote so they decode back as strings —
+  canonical number form, and nested-uniform columns folded into
+  `field{sub,...}` header groups instead of JSON-blobbed cells.
+- **New `parsed:gcf` candidate** (blackwell-systems GCF SPEC v3.4.1,
+  generic profile): the required `GCF profile=generic` preamble,
+  `## [N]{fields}` section header, pipe-delimited rows, `-` for null vs
+  `~` for field-absent (a distinction our CSV's empty cell conflates),
+  and nested-uniform dict columns flattened into quoted `parent>child`
+  path columns under §7.4.6's strict preconditions.
+- **Conformance beats coverage**: whatever a conforming document cannot
+  represent DECLINES the candidate — array cells, non-uniform nesting,
+  and applied profile projections (neither spec gives the omission
+  marker an in-document home; TOON forbids encoder comments and
+  trailing content outright), where previously `parsed:toon` emitted a
+  pragmatic extension. Lossy projections stay CSV's business; CSV and
+  `parsed:sections` are unchanged byte-for-byte, and `optimize_parsed`/
+  `compact` winners are unaffected (CSV still undercuts both specs on
+  flat tables — these candidates exist for consumer policies that value
+  TOON's `[N]` truncation guardrails or GCF-ecosystem interop above
+  minimum bytes).
+- **Verified against the reference implementations locally** (CI stays
+  dependency-free): every emitted TOON document decodes in the official
+  CLI's strict mode (`@toon-format/cli` 4.1.1) and round-trips exactly,
+  and every GCF document round-trips exactly through `gcf-python` 2.4.0
+  — with our output byte-identical to BOTH projects' own reference
+  encoders on the compared shapes (flat tables, nested folds/path
+  columns, null-vs-absent rows).
+- Roadmap re-phased alongside (README/DESIGN): interop formats shipped
+  as Phase 6, the MCP-middleware direction is Phase 8, and
+  session/delta encoding is deliberately last as Phase 9 — stateful,
+  needs per-command row-key definitions and extensive testing before
+  any of it ships.
+
 ## 0.2.0 — 2026-08-05
 
 ### One verb across runner libraries: `neterse.compact` (decision 32)

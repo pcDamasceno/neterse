@@ -138,9 +138,11 @@ def test_updown_projects_parsed_rows_by_field_name():
     assert lines[-1] == omission_marker(("ip_address",))
     assert csv.dropped_fields == ("ip_address",)
     assert csv.profile == "updown"
-    toon = next(c for c in cands if c.source == "parsed:toon")
-    assert toon.text.splitlines()[0] == "[3]{interface,status,proto}:"
-    assert toon.text.splitlines()[-1] == omission_marker(("ip_address",))
+    # The spec-format candidates DECLINE under an applied projection: a
+    # conforming TOON/GCF encoder cannot carry the omission marker
+    # in-document (no comments, no trailing content), and an undeclared
+    # drop would violate invariant 4 — so lossy renderings stay CSV's.
+    assert not any(c.source in ("parsed:toon", "parsed:gcf") for c in cands)
 
 
 def test_updown_keeps_line_protocol_on_ntc_show_interfaces_schema():
