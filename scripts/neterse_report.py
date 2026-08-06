@@ -63,6 +63,14 @@ except Exception:                                # optional, never required
 SPEC_FORMATS = ("parsed:toon", "parsed:gcf")
 
 
+def _installed(module: str) -> bool:
+    try:
+        __import__(module)
+    except Exception:
+        return False
+    return True
+
+
 def tokens(text: str):
     """Real token count under the pinned encoding, or None without tiktoken."""
     return len(_ENC.encode(text)) if _ENC else None
@@ -222,6 +230,19 @@ def report(
             print(f"\n  not emitted: {', '.join(sorted(missing))}")
             for reason in declines(parsed):
                 print(f"    - {reason}")
+            # The commonest reason by far is simply that the extras are
+            # absent: our own encoders decline these shapes on purpose,
+            # and the spec authors' encoders — which do not — are opt-in.
+            # Saying so here beats making the reader infer it from a
+            # decline reason that is accurate but not actionable.
+            uninstalled = [extra for extra, module in
+                           (("toon", "toon_format"), ("gcf", "gcf"))
+                           if f"parsed:{extra}" in missing
+                           and not _installed(module)]
+            if uninstalled:
+                print(f"\n  the reference encoders are not installed — they "
+                      f"cover shapes we decline\n    pip install "
+                      f"'neterse[{','.join(uninstalled)}]'")
             # An envelope declines for a reason that reads as a flaw in the
             # payload when it is really a flaw in where you pointed.
             nested = [p for p in row_lists(parsed) if p[0]]
