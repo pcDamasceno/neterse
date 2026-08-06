@@ -1,8 +1,9 @@
 # neterse — design, topology, and plan
 
-*Status: Phase 6 shipped (spec-compliant TOON and GCF generic-profile
-interop candidates in the parsed tier); the PyPI publish itself awaits
-the maintainer's tag (docs/RELEASING.md).
+*Status: 0.3.0 cut — Phase 6 (spec-compliant TOON and GCF
+generic-profile interop candidates in the parsed tier) plus the
+`neterse.normalizers` seam and nested-collection sections; the PyPI
+publish itself awaits the maintainer's tag (docs/RELEASING.md).
 This document is the project's source of truth for architecture and
 roadmap; decisions recorded here are binding until a new entry supersedes
 them.*
@@ -44,8 +45,9 @@ faithful representation before it enters model context.
         │  └──────────────────────────────┘  └──────────────────────────┘ │
         │  ┌── parsed tier ──────────────────────────────────────────────┐│
         │  │ parsed.py: rows Genie/ntc-templates/TTP/NAPALM already      ││
-        │  │ produced → header-once encoders (parsed:csv, parsed:toon,   ││
-        │  │ parsed:sections); command-independent; profiles by field.  ││
+        │  │ produced → header-once encoders (parsed:csv, spec-conform-  ││
+        │  │ ing parsed:toon/parsed:gcf, parsed:sections); command-      ││
+        │  │ independent; profiles by field.                             ││
         │  │ normalizers/<vendor>.py: vendor/API envelopes (ACI imdata,  ││
         │  │ SD-WAN, Meraki, …) → canonical rows BEFORE encoding, so     ││
         │  │ parsed.py stays vendor-agnostic (register_normalizer hatch).││
@@ -109,10 +111,14 @@ neterse.normalizers.register_normalizer(fn)  # future vendor/API shapes plug in 
   `platform="arista_eos"`.
 * `parsed`: rows already produced by Genie /
   ntc-templates / TTP / NAPALM / gNMI — a list of dicts (or one dict) —
-  re-encoded header-once as two candidates, `parsed:csv` and
-  `parsed:toon` (`method="parsed"`), independent of any registry match.
-  Both are emitted every time; smallest-wins is the consumer's call
-  (decision 10). Non-row-shaped input yields no candidates.
+  re-encoded header-once (`method="parsed"`), independent of any
+  registry match. `parsed:csv` is emitted whenever the input is
+  row-shaped; the spec-compliant `parsed:toon` and `parsed:gcf` are
+  emitted only when a *conforming* document can represent those rows and
+  DECLINE otherwise (decision 35); `parsed:sections` covers mixed
+  tool/API responses. Whichever are emitted, smallest-wins is the
+  consumer's call (decision 10). Non-row-shaped input yields no
+  candidates.
 * `profile`: named, *declared-lossy* projections
   (`updown` ships first: interface liveness only). Renderings under a
   non-default profile append an inline omission marker
