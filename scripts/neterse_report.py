@@ -68,48 +68,87 @@ def tokens(text: str):
     return len(_ENC.encode(text)) if _ENC else None
 
 
+def _column_reasons(items: list, keys: list, path: tuple = ()) -> list:
+    """One pass of the eligibility walk, recursing where the encoders do.
+
+    Mirrors ``_toon_columns`` (§9.3) and ``_gcf_leaf_paths`` (§7.4.6).
+    The recursion is the whole point: a dict column can be perfectly
+    legal at the top level and still decline because one of its *own*
+    sub-values holds an array. A flat check passes such a column and then
+    finds nothing to report, so the report prints "not emitted" with no
+    reason underneath — the single outcome this function exists to
+    prevent. Names the full dotted path, not just the outermost key.
+    """
+    reasons = []
+    for key in keys:
+        where = ".".join(path + (key,))
+        present = [row[key] for row in items if key in row]
+        dicts = [v for v in present if isinstance(v, dict)]
+        if len(present) != len(items):
+            reasons.append(
+                f"{where!r}: missing from {len(items) - len(present)}/"
+                f"{len(items)} rows -> TOON declines (§9.3 needs identical "
+                f"key sets); GCF encodes it as '~'"
+            )
+        if any(isinstance(v, (list, tuple)) for v in present):
+            reasons.append(f"{where!r}: array cell -> BOTH decline")
+        if ">" in key:
+            reasons.append(
+                f"{where!r}: contains '>' -> GCF declines (reserved for path "
+                f"columns); TOON quotes the key and carries on")
+        if not dicts:
+            continue
+        if len(dicts) != len(present):
+            reasons.append(
+                f"{where!r}: mixes objects with scalars -> BOTH decline")
+        elif len(present) != len(items):
+            reasons.append(
+                f"{where!r}: object column absent in some rows -> GCF "
+                f"declines (§7.4.6 needs the parent in every row)")
+        elif any(not v for v in dicts):
+            reasons.append(f"{where!r}: empty-object cell -> BOTH decline")
+        elif any(set(v) != set(dicts[0]) for v in dicts):
+            reasons.append(
+                f"{where!r}: non-uniform nested keys -> BOTH decline "
+                f"(folding requires identical sub-key sets)")
+        else:
+            # Legal so far, so the encoders fold it and keep walking.
+            # So do we — the real disqualifier usually lives down here.
+            reasons += _column_reasons(dicts, _columns(dicts), path + (key,))
+    return reasons
+
+
 def declines(parsed) -> list:
     """Why the spec-compliant formats refused this payload, per column.
 
-    Mirrors the eligibility walks in :mod:`neterse.parsed` (TOON §9.3,
-    GCF §7.4.6). Reporting only — it never changes what is emitted.
+    Reporting only — it never changes what is emitted.
     """
     rows = _rows(parsed)
     if rows is None:
         return ["not row-shaped: no normalizer claimed it and it is neither "
                 "a dict nor a list of str-keyed dicts — only parsed:sections "
                 "can apply"]
-    reasons = []
-    for key in _columns(rows):
-        present = [row[key] for row in rows if key in row]
-        dicts = [v for v in present if isinstance(v, dict)]
-        if len(present) != len(rows):
-            reasons.append(
-                f"{key!r}: missing from {len(rows) - len(present)}/{len(rows)} "
-                f"rows -> TOON declines (§9.3 needs identical key sets); "
-                f"GCF encodes it as '~'"
-            )
-        if any(isinstance(v, (list, tuple)) for v in present):
-            reasons.append(f"{key!r}: array cell -> BOTH decline")
-        if dicts:
-            if len(dicts) != len(present):
-                reasons.append(
-                    f"{key!r}: mixes objects with scalars -> BOTH decline")
-            elif len(present) != len(rows):
-                reasons.append(
-                    f"{key!r}: object column absent in some rows -> GCF "
-                    f"declines (§7.4.6 needs the parent in every row)")
-            elif any(not v for v in dicts):
-                reasons.append(f"{key!r}: empty-object cell -> BOTH decline")
-            elif any(set(v) != set(dicts[0]) for v in dicts):
-                reasons.append(
-                    f"{key!r}: non-uniform nested keys -> BOTH decline "
-                    f"(folding requires identical sub-key sets)")
-        if ">" in key:
-            reasons.append(
-                f"{key!r}: contains '>' -> GCF declines (reserved for path "
-                f"columns); TOON quotes the key and carries on")
-    return reasons
+    return _column_reasons(rows, _columns(rows))
+
+
+def row_lists(node, path=(), out=None) -> list:
+    """Dotted paths to every nested list-of-dicts, biggest first.
+
+    By far the most common reason both spec formats decline is that the
+    document is an *envelope*: the rows are real and perfectly tabular,
+    but they sit two or three levels down while the top level is a single
+    row of metadata that no tabular encoder can do anything with. Naming
+    the path turns a dead end into a working ``--key``.
+    """
+    if out is None:
+        out = []
+    if isinstance(node, list):
+        if node and all(isinstance(v, dict) for v in node):
+            out.append((".".join(path), len(node)))
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            row_lists(value, path + (key,), out)
+    return sorted(out, key=lambda p: -p[1])
 
 
 def report(
@@ -183,6 +222,13 @@ def report(
             print(f"\n  not emitted: {', '.join(sorted(missing))}")
             for reason in declines(parsed):
                 print(f"    - {reason}")
+            # An envelope declines for a reason that reads as a flaw in the
+            # payload when it is really a flaw in where you pointed.
+            nested = [p for p in row_lists(parsed) if p[0]]
+            if nested:
+                print("\n  the rows are nested — point at them directly:")
+                for where, count in nested[:3]:
+                    print(f"    --key {where}    ({count} objects)")
 
     if show:
         for c in sorted(candidates, key=lambda c: len(c.text)):
@@ -199,9 +245,10 @@ def main(argv=None) -> int:
                "characters, which overstates token savings.",
     )
     ap.add_argument("path", help="JSON file, raw capture, or - for stdin")
-    ap.add_argument("--key", help="also report on this top-level key alone "
-                                  "(an array cell declines both spec formats, "
-                                  "so the subtree often does better)")
+    ap.add_argument("--key", help="also report on this subtree alone, dotted "
+                                  "for nesting (e.g. data.imdata) — an array "
+                                  "cell declines both spec formats, so the "
+                                  "subtree usually does far better")
     ap.add_argument("--profile", default="default",
                     help="named projection, e.g. 'updown' (declared-lossy)")
     ap.add_argument("--show", action="store_true",
@@ -242,10 +289,18 @@ def main(argv=None) -> int:
     report(parsed, profile=args.profile, show=args.show,
            label=f"{args.path} — whole document")
     if args.key:
-        if not isinstance(parsed, dict) or args.key not in parsed:
-            raise SystemExit(f"--key {args.key!r}: not a top-level key of "
-                             f"{args.path}")
-        report(parsed[args.key], profile=args.profile, show=args.show,
+        node, walked = parsed, []
+        for part in args.key.split("."):
+            if not isinstance(node, dict) or part not in node:
+                raise SystemExit(
+                    f"--key {args.key!r}: {'.'.join(walked) or '<root>'} has "
+                    f"no key {part!r}"
+                    + (f" (available: {', '.join(map(repr, node))})"
+                       if isinstance(node, dict) else
+                       f" — it is a {type(node).__name__}, not an object"))
+            node = node[part]
+            walked.append(part)
+        report(node, profile=args.profile, show=args.show,
                label=f"{args.path}[{args.key!r}] — the subtree alone")
     return 0
 
