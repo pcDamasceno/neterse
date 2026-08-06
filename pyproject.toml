@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # by an abandoned 2019 package. Distribution, import, and CLI
 # share the one name.
 name = "neterse"
-version = "0.3.1"                     # keep in lockstep with neterse.__version__
+version = "0.4.0"                     # keep in lockstep with neterse.__version__
 description = "neterse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -44,10 +44,22 @@ neterse = "neterse.audit:main"
 [project.optional-dependencies]
 # PyYAML is authoring-time tooling only (scripts/compile_specs.py and the
 # spec drift test) — the runtime imports the generated _compiled.py.
-test = ["pytest", "PyYAML"]
+test = ["pytest", "PyYAML", "gcf-python>=2.4", "toon-format>=0.9.0b1"]
 # Drives ntc-templates/TextFSM from neterse.ntc: parse + render in one
 # call. The core never imports it — everything fails open without it.
 textfsm = ["ntc-templates"]
+# The spec authors' own encoders. Installed, they PRODUCE parsed:gcf /
+# parsed:toon instead of our stdlib readings of the specs — same bytes
+# where both apply, plus the document forms a flat row table cannot
+# express (named tables, API envelopes, ragged rows, array cells).
+# Absent, the stdlib encoders stand in; nothing here is ever required.
+gcf = ["gcf-python>=2.4"]
+# toon-format's 0.1.0 "stable" ships an encoder that raises
+# NotImplementedError, so the floor is the pre-release that works. The
+# specifier names it explicitly, which is what lets pip resolve a
+# pre-release here without a global --pre. Needs Python >=3.10, so this
+# extra simply does not install on 3.9 — by design, it fails open.
+toon = ["toon-format>=0.9.0b1"]
 # Later phases: tokens = ["tiktoken"], …
 
 [tool.setuptools]

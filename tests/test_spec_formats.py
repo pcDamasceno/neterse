@@ -24,6 +24,7 @@ import json
 
 from neterse import render_parsed
 from neterse.parsed import (
+    _columns,
     _gcf_encoded,
     _number_literal,
     _toon_encoded,
@@ -42,6 +43,22 @@ def _by_source(parsed, profile="default"):
 
 def _encoded(parsed):
     return {source: text for text, source, _, _ in encode(parsed, "default")}
+
+
+def _stdlib(rows):
+    """Sources OUR OWN encoders emit for *rows*, ignoring the extras.
+
+    The declines below are claims about this implementation's reading of
+    each spec, not about what a conforming document can hold. With the
+    ``toon``/``gcf`` extras installed the reference encoders cover
+    several of these shapes faithfully — array cells get attachment
+    syntax, ragged rows get ``~`` or the non-tabular form — and
+    ``encode()`` then supplements us with them. Asserting on ``encode()``
+    here would only record which packages happen to be installed.
+    """
+    cols = _columns(rows)
+    return {enc[1] for enc in (_toon_encoded(rows, cols, ()),
+                               _gcf_encoded(rows, cols, ())) if enc is not None}
 
 
 # ---------------------------------------------------------------------------
@@ -121,9 +138,8 @@ def test_toon_requires_identical_key_sets():
     missing key as ``null`` would fabricate data. GCF's ``~`` handles
     absence natively, so it still renders."""
     rows = [{"a": "x", "b": "y"}, {"a": "z"}]
-    sources = _encoded(rows)
-    assert "parsed:toon" not in sources
-    assert sources["parsed:gcf"].splitlines()[2:] == ["x|y", "z|~"]
+    assert _stdlib(rows) == {"parsed:gcf"}
+    assert _encoded(rows)["parsed:gcf"].splitlines()[2:] == ["x|y", "z|~"]
 
 
 # ---------------------------------------------------------------------------
@@ -186,8 +202,11 @@ def test_delimiter_and_structural_characters_quote_and_escape():
     assert encoded["parsed:toon"].splitlines()[1] == (
         '  "a,b",c|d,"e:f","g\\"h","i\\nj","--"'
     )
+    # The comma is not a GCF row delimiter, but the reference encoder
+    # quotes it anyway (it separates field names in the section header
+    # and elements in an array sidecar) and we match its bytes.
     assert encoded["parsed:gcf"].splitlines()[2] == (
-        'a,b|"c|d"|e:f|"g\\"h"|"i\\nj"|--'
+        '"a,b"|"c|d"|e:f|"g\\"h"|"i\\nj"|--'
     )
 
 
@@ -208,12 +227,12 @@ def test_numbers_encode_canonically():
     assert _number_literal(42) == "42"
     assert _number_literal(-7) == "-7"
     assert _number_literal(3.0) == "3"              # zero fraction → integer
-    assert _number_literal(-0.0) == "0"
+    assert _number_literal(-0.0) == "-0"            # signed zero keeps its sign
     assert _number_literal(3.14) == "3.14"
     assert _number_literal(1.5e-5) == "0.000015"    # in range → no exponent
     assert _number_literal(1e16) == "10000000000000000"
     assert _number_literal(1.25e-7) == "1.25e-7"    # out of range → exponent
-    assert _number_literal(1e21) == "1e21"
+    assert _number_literal(1e21) == "1e+21"         # exponent keeps its sign
     assert _number_literal(float("nan")) is None    # caller maps to its null
     assert _number_literal(float("inf")) is None
 
@@ -241,7 +260,8 @@ def test_array_cells_decline_both_spec_formats():
     (TOON: disqualifies tabular; GCF: needs attachment syntax we don't
     emit). CSV keeps covering the shape with its JSON-blobbed cell."""
     rows = [{"intf": "Gi0/1", "members": ["Gi0/2", "Gi0/3"]}]
-    assert set(_encoded(rows)) == {"parsed:csv"}
+    assert not _stdlib(rows)
+    assert "parsed:csv" in _encoded(rows)
 
 
 def test_non_uniform_nesting_declines_folding_formats():
@@ -249,20 +269,19 @@ def test_non_uniform_nesting_declines_folding_formats():
         [{"id": "1", "meta": {"a": "x"}}, {"id": "2", "meta": {"b": "y"}}],
         [{"id": "1", "meta": {"a": "x"}}, {"id": "2", "meta": None}],
     ):
-        assert set(_encoded(rows)) == {"parsed:csv"}
+        assert not _stdlib(rows)
 
 
 def test_empty_object_cells_decline_both():
     rows = [{"id": "1", "meta": {}}] * 2
-    assert set(_encoded(rows)) == {"parsed:csv"}
+    assert not _stdlib(rows)
 
 
 def test_reserved_path_character_in_a_field_name_declines_gcf_only():
     rows = [{"a>b": "x"}] * 2
-    sources = _encoded(rows)
-    assert "parsed:gcf" not in sources
+    assert _stdlib(rows) == {"parsed:toon"}
     # TOON just quotes the key — still a conforming document
-    assert sources["parsed:toon"].splitlines()[0] == '[2]{"a>b"}:'
+    assert _encoded(rows)["parsed:toon"].splitlines()[0] == '[2]{"a>b"}:'
 
 
 def test_applied_projection_declines_both():
