@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-08-06
 
 ### MCP tool results — phase 8's first non-CLI surface (decision 38)
 

@@ -1,14 +1,14 @@
 # neterse — design, topology, and plan
 
-*Status: 0.4.1 cut, phase 8 opened — Phase 6 (spec-compliant TOON and GCF
+*Status: 0.5.0 cut, phase 8 opened — Phase 6 (spec-compliant TOON and GCF
 generic-profile interop candidates in the parsed tier) plus the
 `neterse.normalizers` seam, nested-collection sections, and delegation to
 the spec authors' own encoders behind the `gcf`/`toon` extras
 (decision 36), the capability set now installable as one `neterse[all]`
 (decision 37). Phase 8's MCP surface has landed: `neterse.mcp` — the
 `neterse-mcp` proxy and `CompactMiddleware` behind the `mcp` extra
-(decision 38). 0.4.0 is published; each later version's publish awaits
-the maintainer's tag (docs/RELEASING.md).
+(decision 38). Published on PyPI through 0.4.1; each version's publish
+awaits the maintainer's tag (docs/RELEASING.md).
 This document is the project's source of truth for architecture and
 roadmap; decisions recorded here are binding until a new entry supersedes
 them.*
