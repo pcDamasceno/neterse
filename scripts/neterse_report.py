@@ -1,4 +1,22 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "gcf-python>=2.4",
+#     "toon-format>=0.9.0b1",
+#     "tiktoken",
+# ]
+# ///
+# ^ PEP 723 inline metadata, so `uv run scripts/neterse_report.py …` gets
+# the reference encoders and the tokenizer without a prepared
+# environment. `uv run` otherwise builds an env from pyproject, where
+# `dependencies = []` is a deliberate invariant — the report then runs but
+# silently reports no parsed:toon/parsed:gcf and no real token counts,
+# which reads as a broken tool rather than a bare environment.
+#
+# neterse itself is NOT declared: the sys.path insert below pins it to
+# this checkout, which is the point of a repo-local report tool. Python
+# >=3.10 is toon-format's floor, above the package's own >=3.9.
 """Every candidate neterse can produce for one input, with token accounting.
 
 The library returns candidates, not policy (invariant 3), and
