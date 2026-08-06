@@ -358,3 +358,113 @@ def test_flat_rows_are_unaffected_by_nested_handling():
     assert "items:" in best
     assert "dn,state,extra" in best                     # extra stays a column
     assert "a,up,[]" in best and "b,down,{}" in best
+
+
+# ---------------------------------------------------------------------------
+# Constant-column folding (decision 39): ``[N rows, each: col=value,...]``
+# ---------------------------------------------------------------------------
+
+#: Six rows sharing two columns — the redundancy controller payloads are
+#: made of (every ACI object repeats its class name and a dozen scheme
+#: defaults; SD-WAN device lists repeat site-wide versions).
+FOLDY = [
+    {"name": f"epg{i}", "tenant": "prod", "state": "applied", "vlan": 100 + i}
+    for i in range(6)
+]
+
+
+def test_constant_columns_fold_into_a_leading_marker():
+    """The fold is a new CANDIDATE (`parsed:fold`), never a change to
+    `parsed:csv` — settled bytes stay settled, smallest-wins picks it."""
+    by_source = {c.source: c for c in render_parsed(FOLDY)}
+    assert "parsed:csv" in by_source                    # unchanged, still there
+    fold = by_source["parsed:fold"]
+    assert fold.text == "\n".join([
+        "[6 rows, each: tenant=prod,state=applied]",
+        "name,vlan",
+        "epg0,100", "epg1,101", "epg2,102",
+        "epg3,103", "epg4,104", "epg5,105",
+    ])
+    assert fold.dropped_fields == ()                    # lossless: declared so
+    assert len(fold.text) < len(by_source["parsed:csv"].text)
+    assert optimize_parsed(FOLDY) == fold.text          # and it wins
+
+
+def test_fold_declines_when_repeating_is_cheaper():
+    """Two short rows: the marker line would cost more than the repeated
+    cells, so no `parsed:fold` candidate exists and every other encoding
+    renders byte-identically to the pre-fold library (the suite-wide pins
+    prove the rest; this pins the decline itself)."""
+    rows = [{"id": "1", "st": "up"}, {"id": "2", "st": "up"}]
+    assert "parsed:fold" not in {c.source for c in render_parsed(rows)}
+
+
+def test_all_constant_rows_collapse_to_the_marker_alone():
+    """When EVERY column folds there are no row lines left; the row count
+    in the marker is what keeps N identical rows distinguishable from one
+    — that count is data, hence the marker carries it."""
+    rows = [{"state": "up", "proto": "up"}] * 4
+    by_source = {c.source: c for c in render_parsed(rows)}
+    assert by_source["parsed:fold"].text == "[4 rows, each: state=up,proto=up]"
+
+
+def test_folded_values_quote_like_csv_cells():
+    rows = [{"n": str(i), "descr": "core, uplink"} for i in range(4)]
+    fold = next(c for c in render_parsed(rows) if c.source == "parsed:fold")
+    assert '[4 rows, each: descr="core, uplink"]' in fold.text
+
+
+def test_sections_tables_fold_too():
+    """The same fold applies to tables INSIDE `parsed:sections` — the MCP
+    envelope path (ACI ``data.imdata``, SD-WAN ``data``) where the
+    redundancy actually arrives."""
+    response = {"status": "ok", "items": FOLDY}
+    sections = next(c for c in render_parsed(response)
+                    if c.source == "parsed:sections")
+    assert 'status:"ok"' in sections.text
+    assert "[6 rows, each: tenant=prod,state=applied]" in sections.text
+    assert "name,vlan" in sections.text
+    assert optimize_parsed(response) == sections.text
+
+
+def test_fold_under_a_profile_keeps_the_omission_marker():
+    """Folding is lossless and orthogonal to declared-lossy projections:
+    the fold folds KEPT columns only, and the projection's omission
+    marker still closes the rendering."""
+    rows = [{"interface": f"Gi0/{i}", "status": "connected", "mtu": 1500}
+            for i in range(5)]
+    fold = next(c for c in render_parsed(rows, profile="updown")
+                if c.source == "parsed:fold")
+    assert fold.text == "\n".join([
+        "[5 rows, each: status=connected]",
+        "interface",
+        "Gi0/0", "Gi0/1", "Gi0/2", "Gi0/3", "Gi0/4",
+        "[omitted: mtu — re-query profile=full]",
+    ])
+    assert fold.dropped_fields == ("mtu",)
+    assert fold.profile == "updown"
+
+
+def test_folded_parent_rows_still_anchor_their_subtables():
+    """In `_table_lines` every parent row line must survive to anchor its
+    indented sub-table, so a fold there keeps the varying columns — and
+    when NO column would remain, the fold is skipped entirely."""
+    parents = [
+        {"dn": f"uni/tn-A/epg-{i}", "cls": "fvAEPg",
+         "_children": [{"fvRsBd": {"attributes": {"tnFvBDName": f"BD{i}"}}}]}
+        for i in range(4)
+    ]
+    best = optimize_parsed({"items": parents})
+    assert "[4 rows, each: cls=fvAEPg]" in best
+    assert best.count("_children:") == 4                # one anchor per parent
+    for i in range(4):
+        assert f"uni/tn-A/epg-{i}" in best and f"BD{i}" in best
+
+    all_constant = [
+        {"cls": "fvAEPg",
+         "_children": [{"fvRsBd": {"attributes": {"tnFvBDName": f"BD{i}"}}}]}
+        for i in range(4)
+    ]
+    best = optimize_parsed({"items": all_constant})
+    assert "each:" not in best                          # fold skipped
+    assert best.count("fvAEPg") == 4                    # rows kept as anchors

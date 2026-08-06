@@ -152,6 +152,22 @@ API versions). The parsed tier (`neterse/parsed.py`) stays
 knowledge lives in its own isolated package, `neterse/normalizers/`, one
 module per style. Adding a vendor never touches `parsed.py`.
 
+**Start with a capture, not with code** (decision 40). Save one real
+response — exactly as your controller's MCP server or REST client
+returned it, credentials and public addresses scrubbed — as
+`tests/fixtures/api_shapes/<vendor>/<name>.json` and run `pytest
+tests/test_api_shapes.py`. The suite asserts it shrinks below its
+compact JSON, that the winner is declared lossless, that every identity
+value (names, dns, addresses) survives verbatim, and that nothing
+raises — no per-vendor test code. The generic engine (recursive section
+encoding, constant-column folding, the normalizers below) covers most
+envelopes as-is: the SD-WAN fixtures in the corpus needed zero vendor
+code and compact −31…63%. `python scripts/neterse_report.py <file>`
+shows every candidate for your capture and names what declined. If the
+result already satisfies you, the capture IS the contribution — it
+pins your vendor against regressions. Only when the shrink disappoints
+does a normalizer earn its place:
+
 A **normalizer** is a tiny fail-open sniffer:
 
 ```python
@@ -161,6 +177,13 @@ Callable[[Any], Optional[list[dict]]]
 It receives an already-decoded structure and returns neterse's **canonical
 row shape** — a non-empty list of string-keyed dicts, one dict per row — or
 `None` for "not my shape" (raising also means "not mine").
+
+(Why not a YAML spec with a "rows live at this path" pointer, like the
+CLI specs? Because the sections encoder already finds row collections
+at ANY depth — a path declaration would restate what recursion
+discovers — and what remains is per-item TRANSFORMATION, which is
+exactly the "run this little program" that the spec-key rule above
+sends to code. Decision 40 records the full reasoning.)
 
 1. **Write the module** as `neterse/normalizers/<vendor>.py` with one
    normalizer function. Scope it tightly — claim only the exact shape you
@@ -197,7 +220,8 @@ def data_list(value: Any) -> Optional[List[dict]]:
    raising or non-canonical normalizer), so you only test your shape.
 
 4. **Run `pytest`.** Once the payload is rows, every parsed-tier encoder
-   (`parsed:csv`, `parsed:toon`, `parsed:gcf`, `parsed:sections`) and
+   (`parsed:csv`, `parsed:fold`, `parsed:toon`, `parsed:gcf`,
+   `parsed:sections`) and
    profile applies for free, and `compact(response)` /
    `optimize_parsed(response)` pick it up automatically. The spec-compliant
    pair only emits when a conforming document can represent the rows;

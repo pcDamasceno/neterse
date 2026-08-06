@@ -20,6 +20,18 @@ returned — candidates, not policy:
     Header-once CSV. Nearly always the smallest faithful encoding of a
     flat uniform table.
 
+``parsed:fold``
+    ``parsed:csv`` with constant columns folded out: a leading
+    ``[N rows, each: col=value,...]`` line states every column whose
+    rendered cell repeats in ALL rows, and the table keeps only the
+    varying columns. Controller payloads are dense with such columns
+    (every ACI object in a class response carries the same class name
+    and a dozen scheme defaults; SD-WAN device lists repeat site-wide
+    versions), so the same data lands in a fraction of the bytes —
+    lossless: names, values and the row count all survive. Emitted only
+    when strictly smaller than ``parsed:csv``; the same fold applies to
+    the tables inside ``parsed:sections``.
+
 ``parsed:toon``
     Spec-compliant TOON tabular form (SPEC.md §9.3: root
     ``[N]{fields}:`` header, comma delimiter, two-space rows,
@@ -160,6 +172,50 @@ def _quote(s: str) -> str:
     if "," in s or '"' in s or "\n" in s:
         return '"' + s.replace('"', '""') + '"'
     return s
+
+
+def _csv_block(items: List[dict], kept: List[str]) -> List[str]:
+    """Header-once CSV lines for *items* over the *kept* columns."""
+    return [",".join(_quote(c) for c in kept)] + [
+        ",".join(_quote(_cell(row.get(c))) for c in kept) for row in items
+    ]
+
+
+def _fold_constants(
+    items: List[dict], kept: List[str]
+) -> Optional[Tuple[str, List[str]]]:
+    """The ``[N rows, each: col=value,...]`` marker and the columns left
+    varying, or ``None`` when nothing is worth folding.
+
+    A column whose rendered cell is identical in every row repeats that
+    value once per row; stating it once in a leading marker line is the
+    same data in fewer bytes. Lossless by construction: column names,
+    values and the row count all survive — the count matters when EVERY
+    column folds and no row lines remain. A column folds only when its
+    pair costs less than the cells it replaces, so short tables decline
+    here and render byte-identically to the unfolded form. Callers still
+    compare the folded and plain renderings and keep the smaller — this
+    per-column test is a filter, not the final word.
+    """
+    if len(items) < 2:
+        return None
+    pairs: List[str] = []
+    varying: List[str] = []
+    for column in kept:
+        cells = [_cell(row.get(column)) for row in items]
+        first = cells[0]
+        if any(cell != first for cell in cells[1:]):
+            varying.append(column)
+            continue
+        quoted = _quote(first)
+        pair = _quote(column) + "=" + quoted
+        if len(items) * (len(quoted) + 1) > len(pair) + 1:
+            pairs.append(pair)
+        else:
+            varying.append(column)
+    if not pairs:
+        return None
+    return "[%d rows, each: %s]" % (len(items), ",".join(pairs)), varying
 
 
 # ---------------------------------------------------------------------------
@@ -471,9 +527,13 @@ def _table_csv(items: List[dict], profile: str) -> Tuple[List[str], Tuple[str, .
         kept, dropped = cols, ()
     else:
         kept, dropped = _project(cols, profile)
-    lines = [",".join(_quote(c) for c in kept)] + [
-        ",".join(_quote(_cell(row.get(c))) for c in kept) for row in items
-    ]
+    lines = _csv_block(items, kept)
+    fold = _fold_constants(items, kept)
+    if fold is not None:
+        marker, varying = fold
+        folded = [marker] + (_csv_block(items, varying) if varying else [])
+        if sum(map(len, folded)) + len(folded) < sum(map(len, lines)) + len(lines):
+            lines = folded
     if dropped:
         lines.append(omission_marker(dropped))
     return lines, dropped
@@ -522,7 +582,19 @@ def _table_lines(
     else:
         kept, dropped = _project(cols, profile)
     dropped_all: List[str] = list(dropped)
-    lines = [",".join(_quote(c) for c in kept)]
+    prefix: List[str] = []
+    fold = _fold_constants(flats, kept)
+    if fold is not None and fold[1]:
+        # Every row line must survive to anchor its sub-tables, so the
+        # all-varying-columns-folded degenerate form stays flat-table
+        # business; here a fold must leave varying columns behind.
+        marker, varying = fold
+        plain = _csv_block(flats, kept)
+        folded = [marker] + _csv_block(flats, varying)
+        if sum(map(len, folded)) + len(folded) < sum(map(len, plain)) + len(plain):
+            prefix = [marker]
+            kept = varying
+    lines = prefix + [",".join(_quote(c) for c in kept)]
     for flat, nested in zip(flats, nested_per_row):
         lines.append(",".join(_quote(_cell(flat.get(c))) for c in kept))
         for key, subrows in nested:
@@ -735,14 +807,22 @@ def encode(parsed: Any, profile: str = "default") -> List[Encoded]:
                 kept, dropped = _project(cols, profile)
             applied = profile if dropped else "default"
 
-            header = ",".join(_quote(c) for c in kept)
-            row_lines = [
-                ",".join(_quote(_cell(row.get(c))) for c in kept) for row in items
-            ]
-            csv_lines = [header] + row_lines
+            csv_lines = _csv_block(items, kept)
             if dropped:
                 csv_lines.append(omission_marker(dropped))
-            encoded.append(("\n".join(csv_lines), "parsed:csv", dropped, applied))
+            csv_text = "\n".join(csv_lines)
+            encoded.append((csv_text, "parsed:csv", dropped, applied))
+            fold = _fold_constants(items, kept)
+            if fold is not None:
+                marker, varying = fold
+                fold_lines = [marker] + (
+                    _csv_block(items, varying) if varying else []
+                )
+                if dropped:
+                    fold_lines.append(omission_marker(dropped))
+                fold_text = "\n".join(fold_lines)
+                if len(fold_text) < len(csv_text):
+                    encoded.append((fold_text, "parsed:fold", dropped, applied))
             toon = _toon_encoded(items, kept, dropped)
             if toon is not None:
                 encoded.append(toon)

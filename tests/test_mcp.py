@@ -304,3 +304,38 @@ def test_module_imports_and_placeholder_names_the_extra(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(mcp_module)
+
+
+# ---------------------------------------------------------------------------
+# --header: moving the client's headers block onto the proxy CLI
+# ---------------------------------------------------------------------------
+
+def test_parse_headers_is_curl_style():
+    from neterse.mcp import _parse_headers
+
+    assert _parse_headers(["Authorization: Bearer dev-token"]) == {
+        "Authorization": "Bearer dev-token"
+    }
+    # first-colon split: a value carrying colons stays whole
+    assert _parse_headers(["X-Auth: a:b:c"]) == {"X-Auth": "a:b:c"}
+    assert _parse_headers([]) == {}
+
+
+@pytest.mark.parametrize("bad", ["no-colon-here", ": value-without-name"])
+def test_parse_headers_rejects_malformed_pairs(bad):
+    from neterse.mcp import _parse_headers
+
+    with pytest.raises(ValueError):
+        _parse_headers([bad])
+
+
+def test_proxy_refuses_headers_on_a_stdio_upstream():
+    """Silently dropping an auth header would leave the upstream
+    unauthenticated with no hint why; the CLI must refuse instead.
+    (argparse error -> SystemExit(2), raised before any proxy starts,
+    so the test needs no fastmcp server.)"""
+    pytest.importorskip("fastmcp")
+    from neterse.mcp import main
+
+    with pytest.raises(SystemExit):
+        main(["python", "server.py", "--header", "Authorization: Bearer x"])
