@@ -80,7 +80,16 @@ lossiness of each, which one smallest-wins takes, and (for structured
 input) the column that made `parsed:toon`/`parsed:gcf` decline, since
 those encoders are fail-open and say nothing when they refuse. Use
 `--raw --command ... --platform ...` for a CLI capture, `--key` to drill
-into a subtree, `--show` to print the renderings themselves.
+into a subtree (dotted for nesting: `--key data.imdata`), `--show` to
+print the renderings themselves.
+
+The report is most useful with the reference encoders and a real
+tokenizer present — `pip install -e '.[gcf,toon]'` plus `tiktoken`.
+`uv run scripts/neterse_report.py <file>` provisions all three itself
+(PEP 723 metadata in the script). Without them it still runs, but
+`parsed:toon`/`parsed:gcf` cover fewer shapes and `saved` falls back to
+characters, which overstates token savings; the report says so in both
+cases rather than leaving you to infer it.
 
 ## Rules the CI enforces (and reviewers care about)
 
