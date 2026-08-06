@@ -29,12 +29,26 @@
   TOON's `[N]` truncation guardrails or GCF-ecosystem interop above
   minimum bytes).
 - **Verified against the reference implementations locally** (CI stays
-  dependency-free): every emitted TOON document decodes in the official
-  CLI's strict mode (`@toon-format/cli` 4.1.1) and round-trips exactly,
-  and every GCF document round-trips exactly through `gcf-python` 2.4.0
-  — with our output byte-identical to BOTH projects' own reference
-  encoders on the compared shapes (flat tables, nested folds/path
-  columns, null-vs-absent rows).
+  dependency-free): every emitted TOON document decodes in
+  `@toon-format/toon` 4.1.1 strict mode and every GCF document decodes
+  in `@blackwell-systems/gcf` 2.4.0, both round-tripping exactly — over
+  a corpus of dict/JSON/API shapes and 1900 randomized row-sets. Both
+  reference implementations are **npm** packages; GCF ships no Python
+  package (PyPI `gcf` is an unrelated project), so an earlier claim of
+  verification against "gcf-python 2.4.0" was wrong and is withdrawn.
+  Our output is byte-identical to both projects' own encoders modulo
+  their trailing newline, with two known cosmetic divergences that
+  round-trip either way: we leave commas unquoted where GCF quotes
+  them, and emit `1e21` where both encoders emit `1e+21`.
+- **Fixed: a `parsed:gcf` cell could forge a section header.** A row
+  whose FIRST cell began with `##` emitted a line a conforming decoder
+  reads as a new `## [N]{fields}` section, failing the document's own
+  declared row count — reachable from real data (`## CORE UPLINK ##` is
+  an interface-description idiom) and silent, since the candidate was
+  handed on as faithful. A leading `#` now quotes, matching the
+  reference encoder's `needsQuote()`. `parsed:toon` was never affected
+  (it already quoted a leading `-`/`#`); regression-tested both ways in
+  `tests/test_spec_formats.py`.
 - Roadmap re-phased alongside (README/DESIGN): interop formats shipped
   as Phase 6, the MCP-middleware direction is Phase 8, and
   session/delta encoding is deliberately last as Phase 9 — stateful,

@@ -143,6 +143,26 @@ def test_strings_a_decoder_would_mistype_are_quoted():
     assert encoded["parsed:gcf"].splitlines()[2] == '"80"|"true"|null|"1e3"'
 
 
+def test_a_cell_cannot_forge_the_gcf_section_header():
+    """A first-column cell starting with ``##`` would otherwise emit a
+    row a decoder reads as a NEW section header, and the document then
+    fails its own declared row count. Reachable from real data —
+    ``## CORE UPLINK ##`` is an interface-description idiom — and it
+    fails silently, so the leading ``#`` quotes. (The reference
+    encoder's own ``needsQuote()`` agrees: any leading ``#``.)"""
+    rows = [{"descr": "## CORE UPLINK ##", "intf": "Gi0/1"},
+            {"descr": "spine", "intf": "Gi0/2"}]
+    body = _encoded(rows)["parsed:gcf"].splitlines()
+    assert body[2] == '"## CORE UPLINK ##"|Gi0/1'
+    assert not any(line.startswith("#") for line in body[2:])
+    # ...and a lone '#' is quoted too, so no row can start one.
+    assert _encoded([{"a": "#note"}] * 2)["parsed:gcf"].splitlines()[2] == '"#note"'
+    # TOON already quotes a leading '#' — pinned so it stays that way.
+    assert _encoded(rows)["parsed:toon"].splitlines()[1] == (
+        '  "## CORE UPLINK ##",Gi0/1'
+    )
+
+
 def test_each_formats_own_keywords_quote_and_no_others():
     """GCF's structural tokens (``-``/``~``/``^``) are plain strings in
     TOON; TOON's ``null`` keyword is a plain string in GCF. Each format

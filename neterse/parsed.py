@@ -335,6 +335,11 @@ def _gcf_string(s: str) -> str:
         or '"' in s
         or "\\" in s
         or _CONTROL_CHARS.search(s)
+        # A leading '#' can forge the '## [N]{fields}' section header when
+        # the cell lands in column 1 — a decoder then reads the row as a
+        # new section and the document fails its own row count. Rare but
+        # real: '## CORE UPLINK ##' is an interface-description idiom.
+        or s[0] == "#"
     ):
         return _escaped(s)
     return s
