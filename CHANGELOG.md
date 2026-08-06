@@ -1,5 +1,60 @@
 # Changelog
 
+## Unreleased
+
+### Spec-compliant interop candidates: TOON 4.1 and GCF v3.4.1 (decision 35)
+
+- **`parsed:toon` is now real TOON** (toon-format SPEC.md 4.1, §9.3 root
+  tabular form), not "TOON-style": strict eligibility (identical key
+  sets, no array or empty-object cells), `null`/`true`/`false` literals,
+  delimiter-aware JSON-grammar quoting — numeric-lookalike strings
+  (TextFSM's entire output) quote so they decode back as strings —
+  canonical number form, and nested-uniform columns folded into
+  `field{sub,...}` header groups instead of JSON-blobbed cells.
+- **New `parsed:gcf` candidate** (blackwell-systems GCF SPEC v3.4.1,
+  generic profile): the required `GCF profile=generic` preamble,
+  `## [N]{fields}` section header, pipe-delimited rows, `-` for null vs
+  `~` for field-absent (a distinction our CSV's empty cell conflates),
+  and nested-uniform dict columns flattened into quoted `parent>child`
+  path columns under §7.4.6's strict preconditions.
+- **Conformance beats coverage**: whatever a conforming document cannot
+  represent DECLINES the candidate — array cells, non-uniform nesting,
+  and applied profile projections (neither spec gives the omission
+  marker an in-document home; TOON forbids encoder comments and
+  trailing content outright), where previously `parsed:toon` emitted a
+  pragmatic extension. Lossy projections stay CSV's business; CSV and
+  `parsed:sections` are unchanged byte-for-byte, and `optimize_parsed`/
+  `compact` winners are unaffected (CSV still undercuts both specs on
+  flat tables — these candidates exist for consumer policies that value
+  TOON's `[N]` truncation guardrails or GCF-ecosystem interop above
+  minimum bytes).
+- **Verified against the reference implementations locally** (CI stays
+  dependency-free): every emitted TOON document decodes in
+  `@toon-format/toon` 4.1.1 strict mode and every GCF document decodes
+  in `@blackwell-systems/gcf` 2.4.0, both round-tripping exactly — over
+  a corpus of dict/JSON/API shapes and 1900 randomized row-sets. Both
+  reference implementations are **npm** packages; GCF ships no Python
+  package (PyPI `gcf` is an unrelated project), so an earlier claim of
+  verification against "gcf-python 2.4.0" was wrong and is withdrawn.
+  Our output is byte-identical to both projects' own encoders modulo
+  their trailing newline, with two known cosmetic divergences that
+  round-trip either way: we leave commas unquoted where GCF quotes
+  them, and emit `1e21` where both encoders emit `1e+21`.
+- **Fixed: a `parsed:gcf` cell could forge a section header.** A row
+  whose FIRST cell began with `##` emitted a line a conforming decoder
+  reads as a new `## [N]{fields}` section, failing the document's own
+  declared row count — reachable from real data (`## CORE UPLINK ##` is
+  an interface-description idiom) and silent, since the candidate was
+  handed on as faithful. A leading `#` now quotes, matching the
+  reference encoder's `needsQuote()`. `parsed:toon` was never affected
+  (it already quoted a leading `-`/`#`); regression-tested both ways in
+  `tests/test_spec_formats.py`.
+- Roadmap re-phased alongside (README/DESIGN): interop formats shipped
+  as Phase 6, the MCP-middleware direction is Phase 8, and
+  session/delta encoding is deliberately last as Phase 9 — stateful,
+  needs per-command row-key definitions and extensive testing before
+  any of it ships.
+
 ## 0.2.0 — 2026-08-05
 
 ### One verb across runner libraries: `neterse.compact` (decision 32)

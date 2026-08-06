@@ -29,7 +29,9 @@ def _compact_json(value) -> str:
 def test_candidates_undercut_the_compact_json_baseline():
     baseline = _compact_json(ROWS)
     candidates = render_parsed(ROWS)
-    assert {c.source for c in candidates} == {"parsed:csv", "parsed:toon"}
+    assert {c.source for c in candidates} == {
+        "parsed:csv", "parsed:toon", "parsed:gcf",
+    }
     for c in candidates:
         assert c.method == "parsed"
         assert 0 < len(c.text) < len(baseline)
@@ -178,7 +180,9 @@ KEYED_GETTER = {
 
 def test_keyed_dict_flattens_to_one_row_per_entry():
     candidates = render_parsed(KEYED_GETTER)
-    assert {c.source for c in candidates} == {"parsed:csv", "parsed:toon"}
+    assert {c.source for c in candidates} == {
+        "parsed:csv", "parsed:toon", "parsed:gcf",
+    }
     csv = next(c for c in candidates if c.source == "parsed:csv")
     lines = csv.text.splitlines()
     assert lines[0] == "key,is_up,description,mtu"      # outer key leads
@@ -262,7 +266,7 @@ ACI_IMDATA = [
 def test_class_attributes_wrappers_flatten_to_rows():
     candidates = render_parsed(ACI_IMDATA)
     assert {candidate.source for candidate in candidates} == {
-        "parsed:csv", "parsed:toon",
+        "parsed:csv", "parsed:toon", "parsed:gcf",
     }
     csv = next(candidate for candidate in candidates
                if candidate.source == "parsed:csv")

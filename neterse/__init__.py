@@ -42,10 +42,11 @@ Public API:
 * ``parsed`` — rows another parser (Genie,
   ntc-templates, TTP, NAPALM, gNMI) already produced for this output: a
   list of dicts (or a single dict — one row). The parsed tier re-encodes
-  them header-once (``parsed:csv`` and ``parsed:toon`` candidates,
-  ``method="parsed"``), independent of any registry match. Malformed or
-  non-row-shaped input yields no parsed candidates — fail-open, like
-  everything else.
+  them header-once (``parsed:csv``, plus spec-compliant ``parsed:toon``
+  and ``parsed:gcf`` documents when the rows are representable in a
+  conforming one; all ``method="parsed"``), independent of any registry
+  match. Malformed or non-row-shaped input yields no parsed candidates —
+  fail-open, like everything else.
 * ``profile`` — a named, opt-in, DECLARED-lossy
   projection (e.g. ``"updown"``: interface liveness only). Entries and
   parsed encodings that know the profile emit only the kept fields and

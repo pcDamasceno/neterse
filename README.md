@@ -104,8 +104,9 @@ strategies (fixed-width table → CSV, line-regex table → CSV, key-value
 scan), with plain-Python compressors as the escape hatch for genuinely
 stateful formats. The **parsed tier** re-encodes rows that Genie /
 ntc-templates / TTP / NAPALM already parsed into compact header-once
-form (`render(..., parsed=rows)` → CSV and TOON-style candidates that
-undercut `json.dumps(rows)` by ~45–50%) — and the optional
+form (`render(..., parsed=rows)` → CSV, spec-compliant TOON and GCF
+generic-profile candidates; the CSV typically undercuts
+`json.dumps(rows)` by ~45–50%) — and the optional
 `neterse.ntc` front-end (`pip install neterse[textfsm]`) runs
 ntc-templates for you, so one call covers both tiers. Opt-in **profiles** (`profile="updown"`) narrow output to a
 declared projection and say so inline
@@ -141,16 +142,20 @@ Networks", inspired by [NetClaw]'s TOON serialization work) built for a
 network agent, and is now a standalone, community-extensible library. It
 complements — not competes with — the parsing ecosystems: [ntc-templates],
 [Genie/pyATS] and [TTP] turn CLI text into structure; neterse makes
-structure (and unparseable raw text) *cheap to show to a model*. The
-tabular encoding aligns with
-[TOON — Token-Oriented Object Notation]; emitting spec-compliant TOON for
-uniform tables is on the roadmap.
+structure (and unparseable raw text) *cheap to show to a model*. It also
+complements the token-format ecosystem rather than betting on one
+notation: the parsed tier emits spec-compliant
+[TOON — Token-Oriented Object Notation] and [GCF] documents as
+candidates alongside its own CSV, so smallest-wins (or your policy —
+TOON's `[N]{fields}` truncation guardrails, GCF's null-vs-absent
+distinction and tooling ecosystem) decides per payload.
 
 [NetClaw]: https://github.com/automateyournetwork/netclaw
 [ntc-templates]: https://github.com/networktocode/ntc-templates
 [Genie/pyATS]: https://developer.cisco.com/docs/pyats/
 [TTP]: https://github.com/dmulyalin/ttp
 [TOON — Token-Oriented Object Notation]: https://github.com/toon-format/toon
+[GCF]: https://github.com/blackwell-systems/gcf
 
 ## Roadmap
 
@@ -162,8 +167,10 @@ uniform tables is on the roadmap.
 | 3 | `neterse audit` coverage tool, fixture-per-file contribution flow, CI token-savings regression (pinned tokenizer), multi-vendor expansion (Arista EOS, Junos, Aruba AOS-CX, MikroTik), PyPI release machinery | ✅ |
 | 4 | Contributor scale-out: YAML spec authoring (one `specs/<vendor>/<family>.yaml` per family, compiled — never parsed — at runtime), registry self-append, `neterse[textfsm]` extra driving ntc-templates end-to-end | ✅ |
 | 5 | Runner integration: the universal `compact()` verb (shape dispatch over connections / responses / raw / rows; source adapters for future libraries) + rows-only `render_parsed`/`optimize_parsed` for already-parsed output | ✅ |
-| 6 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
-| 7 | Beyond the CLI: the same candidates contract for MCP tool results, API responses, and generic JSON payloads | ▢ |
+| 6 | Interop format candidates: spec-compliant **TOON** (`[N]{fields}` declarations double as truncation guardrails) and **GCF** generic-profile encoders in the parsed tier — emitted only when the document conforms, chosen only when your policy wants them | ✅ |
+| 7 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
+| 8 | Beyond the CLI: the same candidates contract for MCP tool results (an MCP middleware that compacts any server's responses), API responses, and generic JSON payloads | ▢ |
+| 9 | Session/delta encoding — render only what changed since the agent's last poll of the same command. Deliberately last: stateful and correctness-sensitive, it needs per-command row-key definitions and extensive testing before it can ship | ▢ |
 
 ## Coverage
 

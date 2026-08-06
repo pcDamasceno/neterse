@@ -143,7 +143,7 @@ def test_render_emits_both_tiers(monkeypatch):
     methods = {c.method for c in cands}
     assert methods == {"toon", "parsed"}
     assert {c.source for c in cands if c.method == "parsed"} == {
-        "parsed:csv", "parsed:toon",
+        "parsed:csv", "parsed:toon", "parsed:gcf",
     }
 
 

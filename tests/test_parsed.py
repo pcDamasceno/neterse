@@ -97,7 +97,9 @@ def test_parsed_tier_is_command_independent():
         IP_INT_BRIEF, command="show some command neterse has never heard of",
         parsed=PARSED_IP_INT_BRIEF,
     )
-    assert {c.source for c in cands} == {"parsed:csv", "parsed:toon"}
+    assert {c.source for c in cands} == {
+        "parsed:csv", "parsed:toon", "parsed:gcf",
+    }
 
 
 # ---------------------------------------------------------------------------

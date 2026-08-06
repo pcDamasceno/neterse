@@ -73,6 +73,15 @@ Found the gap in a real agent run? `neterse audit run.jsonl --show 3`
 ranks uncovered families by wasted volume and dumps the head of each, so
 the format can be read before the spec is written.
 
+Working on ONE payload rather than a corpus?
+`python scripts/neterse_report.py <file>` prints every candidate for it —
+characters, `est_tokens()` beside a real tokenizer count, the declared
+lossiness of each, which one smallest-wins takes, and (for structured
+input) the column that made `parsed:toon`/`parsed:gcf` decline, since
+those encoders are fail-open and say nothing when they refuse. Use
+`--raw --command ... --platform ...` for a CLI capture, `--key` to drill
+into a subtree, `--show` to print the renderings themselves.
+
 ## Rules the CI enforces (and reviewers care about)
 
 - **Fail-open, always.** Unparseable or non-shrinking input returns raw.
@@ -179,9 +188,11 @@ def data_list(value: Any) -> Optional[List[dict]]:
    raising or non-canonical normalizer), so you only test your shape.
 
 4. **Run `pytest`.** Once the payload is rows, every parsed-tier encoder
-   (`parsed:csv`, `parsed:toon`, `parsed:sections`) and profile applies for
-   free, and `compact(response)` / `optimize_parsed(response)` pick it up
-   automatically.
+   (`parsed:csv`, `parsed:toon`, `parsed:gcf`, `parsed:sections`) and
+   profile applies for free, and `compact(response)` /
+   `optimize_parsed(response)` pick it up automatically. The spec-compliant
+   pair only emits when a conforming document can represent the rows;
+   `scripts/neterse_report.py` names the column when it can't.
 
 Out-of-tree or a per-version override? No PR needed — `register_normalizer`
 inserts ahead of the built-ins:
