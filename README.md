@@ -83,6 +83,82 @@ info; map it: `[compact(r) for r in multi]`.
 A future library is a small source adapter
 (`neterse.sources.register_adapter`) — never a new API name.
 
+## MCP tool results
+
+The same payloads reach agents through MCP servers, and the client's
+server config is the one seam you control for every server — so neterse
+ships a proxy (`pip install "neterse[mcp]"`, Python 3.10+).
+
+### Wrap any server from your client's config
+
+Wherever your client lists MCP servers — `mcp.json` in VS Code,
+`claude mcp add` in Claude Code, the equivalent in Cursor — point the
+entry at `neterse-mcp` and hand it the upstream you would have
+configured. An HTTP upstream is one argument:
+
+```json
+"aci": {
+  "command": "neterse-mcp",
+  "args": ["https://apic-mcp.example.com/mcp"]
+}
+```
+
+A stdio upstream is the original command line, verbatim:
+
+```json
+"github": {
+  "command": "neterse-mcp",
+  "args": ["docker", "run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+           "ghcr.io/github/github-mcp-server"],
+  "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "..." }
+}
+```
+
+(the proxy forwards its full environment to a stdio upstream, so `env`
+blocks keep working). No global install needed —
+`"command": "uvx", "args": ["--from", "neterse[mcp]", "neterse-mcp", ...]`
+resolves it on the fly, and from a source checkout use
+`"command": "uv", "args": ["run", "--with-editable", "/path/to/neterse",
+"--with", "fastmcp", "neterse-mcp", ...]`.
+
+Restart the server entry and watch its output/log pane: every compacted
+call prints one ledger line on stderr —
+
+```
+[neterse] aci_bridge_domains_get: 30,190 -> 9,866 chars (~7,547 -> ~2,466 tok, -67%)
+```
+
+### What the model sees
+
+Per `tools/call` result, a text block whose content is JSON comes back
+re-encoded through the parsed tier (vendor envelopes like ACI `imdata`
+included) — and only when strictly smaller than the wire text; nothing
+ever grows. A `structuredContent` that merely mirrors that block — the
+way FastMCP duplicates every tool return — follows it instead of
+smuggling the original back beside the compacted text: the
+`{"result": <text>}` string mirror is rewritten, a deep-equal copy is
+dropped, and listed tools shed `outputSchema` accordingly (the proxy's
+contract is "the text block is the payload"). Everything else passes
+through byte-identical: non-JSON text, error results, images, input
+schemas, and structured content that carries anything of its own.
+
+Flags: `--quiet` silences the ledger; `--keep-structured` disables the
+dedupe and preserves upstream `structuredContent` and `outputSchema`
+verbatim (at the cost of hosts feeding the model both copies).
+
+### Servers you author, loops you own
+
+For a FastMCP server you author, skip the proxy — it's one line:
+
+```python
+from neterse.mcp import CompactMiddleware
+mcp.add_middleware(CompactMiddleware())
+```
+
+When your consumer is an agent loop you own, you don't need MCP
+middleware at all — call `compact()` on the result before it enters
+context.
+
 ## Install
 
 ```bash
@@ -99,6 +175,7 @@ core imports the standard library only. Pick individually if you prefer:
 | `gcf` | `gcf-python` | the GCF authors' encoder — named tables, API envelopes, ragged rows |
 | `toon` | `toon-format` | the same, for TOON |
 | `tokens` | `tiktoken` | real token counts in `scripts/neterse_report.py` (the runtime stays chars/4) |
+| `mcp` | `fastmcp` (3.10+) | `neterse-mcp`, a proxy that compacts any MCP server's tool results, + `CompactMiddleware` for FastMCP servers |
 
 Without `gcf`/`toon` the stdlib encoders stand in and cover fewer shapes;
 without `textfsm` you parse it yourself and pass `parsed=`. Everything
@@ -183,7 +260,7 @@ distinction and tooling ecosystem) decides per payload.
 | 5 | Runner integration: the universal `compact()` verb (shape dispatch over connections / responses / raw / rows; source adapters for future libraries) + rows-only `render_parsed`/`optimize_parsed` for already-parsed output | ✅ |
 | 6 | Interop format candidates: spec-compliant **TOON** (`[N]{fields}` declarations double as truncation guardrails) and **GCF** generic-profile encoders in the parsed tier — emitted only when the document conforms, chosen only when your policy wants them | ✅ |
 | 7 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
-| 8 | Beyond the CLI: the same candidates contract for MCP tool results (an MCP middleware that compacts any server's responses), API responses, and generic JSON payloads | ▢ |
+| 8 | Beyond the CLI: the same candidates contract for MCP tool results (the `neterse-mcp` proxy + `CompactMiddleware`, `neterse[mcp]`), API responses, and generic JSON payloads | ◐ |
 | 9 | Session/delta encoding — render only what changed since the agent's last poll of the same command. Deliberately last: stateful and correctness-sensitive, it needs per-command row-key definitions and extensive testing before it can ship | ▢ |
 
 ## Coverage

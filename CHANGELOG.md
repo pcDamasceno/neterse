@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased
+
+### MCP tool results — phase 8's first non-CLI surface (decision 38)
+
+```
+pip install "neterse[mcp]"
+neterse-mcp https://host/mcp        # wrap any MCP server from mcp.json
+```
+
+An MCP tool result is the same verbose payload a runner hands back —
+JSON, usually pretty-printed — arriving through a protocol instead of a
+connection object. The placement resolves on ownership: the one seam the
+consumer controls for *every* server is the client's server config, so
+the shipping artifact is a proxy.
+
+- **New module `neterse.mcp`.** The pure core is stdlib and works
+  without any extra: `compact_text` claims a string only when it
+  json-decodes to a container, routes it through `compact()`
+  (normalizers → parsed tier → smallest-wins) and replaces it only when
+  strictly smaller than the original wire text; `compact_result` applies
+  that to a wire-shaped `tools/call` result dict without mutating it.
+- **`neterse-mcp`, the stdio proxy.** Point a client's server entry at
+  `neterse-mcp <url-or-command>` instead of the upstream
+  (streamable-HTTP URL or stdio command line) and every `tools/call`
+  result comes back compacted, with a per-call savings ledger on stderr.
+  APIC-shaped fixtures compact −68…75%.
+- **`CompactMiddleware`** for FastMCP servers you author:
+  `mcp.add_middleware(CompactMiddleware())`.
+- **Everything unclaimed passes through byte-identical**: non-JSON text,
+  JSON scalars, `isError` results, non-text blocks, input schemas, and
+  `structuredContent` that carries anything of its own.
+- **Duplicate `structuredContent` follows the compacted text** (default
+  on, `--keep-structured` opts out). FastMCP mirrors every tool return
+  into `structuredContent`, and hosts that surface both fed the model
+  the original beside the compacted text, negating the saving — seen in
+  the field on day one. The `{"result": <text>}` string mirror is
+  rewritten, a deep-equal copy of the decoded payload is dropped, and —
+  because the MCP server layer rejects results whose tool declares
+  `outputSchema` but returns no structured output — listed tools shed
+  `output_schema` while dedupe is on: the proxy's contract is "the text
+  block is the payload".
+- **New extra `mcp`** (`fastmcp>=3`, marker-gated to Python 3.10+ so
+  `neterse[all]` still resolves on 3.9, where the extra installs nothing
+  and the adapters fail open). `dependencies = []` is untouched:
+  `import neterse.mcp` works without the extra and `CompactMiddleware`
+  names it at instantiation instead.
+
 ## 0.4.1 — 2026-08-06
 
 ### One extra that installs the lot (decision 37)

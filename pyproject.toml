@@ -40,6 +40,7 @@ Issues = "https://github.com/pcDamasceno/neterse/issues"
 
 [project.scripts]
 neterse = "neterse.audit:main"
+neterse-mcp = "neterse.mcp:main"
 
 [project.optional-dependencies]
 # --- capability extras: each one widens what neterse can do -------------
@@ -63,6 +64,15 @@ toon = ["toon-format>=0.9.0b1"]
 # chars/4 (decision 8) and the package never imports a tokenizer, so
 # this changes what the tooling can measure, not what the library does.
 tokens = ["tiktoken"]
+# MCP tool results — phase 8's first non-CLI surface (decision 38).
+# fastmcp powers the two adapters only: the `neterse-mcp` stdio proxy
+# that compacts ANY server's results from the client's config seam, and
+# CompactMiddleware for FastMCP servers you author. The pure seam
+# (compact_text / compact_result) is stdlib and works without this.
+# fastmcp needs 3.10+; the marker keeps `neterse[all]` resolving on 3.9,
+# where this extra installs nothing and the adapters fail open like any
+# other missing extra.
+mcp = ["fastmcp>=3; python_version >= '3.10'"]
 #
 # --- aggregates --------------------------------------------------------
 # Everything above, for people who would rather not track which capability
@@ -71,7 +81,7 @@ tokens = ["tiktoken"]
 # `test` is out on purpose — pytest and PyYAML are for working ON neterse,
 # not with it. tests/test_packaging.py gates this list against the extras
 # above so a new capability cannot quietly go missing from it.
-all = ["neterse[gcf,textfsm,toon,tokens]"]
+all = ["neterse[gcf,mcp,textfsm,toon,tokens]"]
 full = ["neterse[all]"]              # alias; both spellings get guessed
 #
 # --- development -------------------------------------------------------
