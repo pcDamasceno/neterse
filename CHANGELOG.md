@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.1 — 2026-08-06
+
+Tooling only. `scripts/` ships in neither the wheel nor the sdist, so the
+installed package is byte-identical to 0.3.0 apart from the version
+string — nothing to gain by upgrading unless you work from a checkout.
+
+### `scripts/neterse_report.py` explains itself again
+
+- **`declines()` walked one level; the encoders recurse.** A dict column
+  can be legal at the top level (present in every row, non-empty,
+  uniform sub-keys) and still decline because one of its *own* values
+  holds an array — `_toon_columns` and `_gcf_leaf_paths` both descend
+  into folded columns, and the flat check did not. The diagnosis came
+  back empty, so the report printed `not emitted:` with no reason under
+  it: the one outcome the function exists to prevent. It now mirrors the
+  recursion and names the full dotted path (`'data.imdata': array cell
+  -> BOTH decline`).
+- **`--key` reached only top-level keys.** API responses nest their rows
+  two or three levels down, so the subtree that actually encodes was
+  unreachable from the CLI. Dotted paths now work (`--key data.imdata`),
+  and a bad path reports which level failed and what keys were there.
+- **Envelopes name their own way out.** When both spec formats decline,
+  the report scans for nested lists-of-dicts and prints them as ready-to-
+  run `--key` paths. Pointing at a wrapper — `{endpoint, method, data:
+  {totalCount, imdata: [...]}}` — makes neterse see one row of request
+  metadata, which is not a table and never will be; the rows are real
+  and one level down. That mistake looks exactly like a broken encoder.
+
 ## 0.3.0 — 2026-08-06
 
 Minor, not patch: this release adds a public extension point
