@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-08-06
+
+Minor, not patch: this release adds a public extension point
+(`neterse.normalizers`) and a new candidate (`parsed:gcf`), and it
+**changes the bytes of candidates that already shipped** —
+`parsed:toon` became spec-compliant and now declines shapes 0.2.0
+encoded, and `parsed:sections` tabulates nested collections it used to
+JSON-blob. A consumer pinned to those exact renderings is affected;
+`parsed:csv` and the whole raw-text tier are untouched.
 
 ### Spec-compliant interop candidates: TOON 4.1 and GCF v3.4.1 (decision 35)
 
@@ -54,6 +62,76 @@
   session/delta encoding is deliberately last as Phase 9 — stateful,
   needs per-command row-key definitions and extensive testing before
   any of it ships.
+
+### Vendor/API payload shapes live in `neterse.normalizers` (decision 33)
+
+- **New public extension point.** Controller APIs return a vendor
+  *envelope*, not rows (Cisco ACI wraps every object as
+  `{class: {attributes: {...}}}` under `imdata`; SD-WAN, Meraki and DNAC
+  each differ, and shapes drift between API versions). That knowledge
+  now lives in its own package instead of accreting inside the
+  vendor-agnostic parsed tier — the same seam `neterse.sources` provides
+  one level up for response objects.
+- A **normalizer** is `Callable[[Any], Optional[list[dict]]]`: receive a
+  decoded structure, return canonical rows or `None` for "not my shape"
+  (raising also means "not mine"). `normalize()` tries them in order;
+  **`neterse.normalizers.register_normalizer(fn)`** inserts custom ones
+  ahead of the built-ins, so out-of-tree vendors *and* per-version
+  overrides win without editing the tree.
+- Built-ins ship one module per style: `_generic.keyed_dict` (the
+  vendor-neutral `{name: {...}}` NAPALM/OpenConfig return) and
+  `cisco_aci.class_attributes` (the `imdata` object style, class name
+  kept as a leading `_class` column). `parsed.py` calls `normalize()`
+  and names no vendor.
+- Adding a vendor is one module plus one line in `NORMALIZERS` — see
+  CONTRIBUTING. Extraction was byte-identical on the ACI captures.
+
+### `parsed:sections` tabulates nested row-collections (decision 34)
+
+- **Subtree responses stopped passing through at 0%.** ACI subtree
+  shapes (`class_query` with `include_children`/`include_faults`,
+  `dn_query` subtrees, `faults_detailed`) carry a heterogeneous
+  `_children`/`_faults` list per object, which the flat encoders
+  JSON-blobbed into a cell *larger* than compact JSON — so the shrink
+  gate correctly rejected every candidate and the raw payload went to
+  the model.
+- A cell whose value `neterse.normalizers.normalize` claims is a table
+  in disguise, so it now renders as an indented recursive sub-table
+  under its row. Vendor-agnostic: the encoder asks what nests, it never
+  names a vendor. Subtree captures go **0% → 38.2% chars / 27.3%
+  tokens**.
+- Rows with no such nesting fall through byte-for-byte, so already-good
+  shapes are unchanged, and already-minimal JSON (help/summary dicts)
+  still yields no candidate — correct fail-open.
+
+### Packaging
+
+- **Fixed: the 0.2.x wheel layout would have omitted
+  `neterse.normalizers`.** The subpackage was added to the tree but
+  never to pyproject's `[tool.setuptools] packages`, so it was absent
+  from the built wheel — and since `parsed.py` imports it at module
+  scope, plain `import neterse` raised `ImportError` in any clean
+  install. Never published (0.2.0 predates the subpackage), and the
+  release workflow's smoke test would have failed the build before
+  PyPI, but it would have surfaced as a red tag.
+- New `tests/test_packaging.py` checks the manifest against the tree on
+  every commit: every subpackage under `neterse/` is declared, no
+  declared package is stale, and the two version spellings stay in
+  lockstep. The rest of the suite imports from the source checkout,
+  where this whole class of error is invisible.
+
+### Tooling
+
+- **`scripts/neterse_report.py`** — every candidate for ONE payload:
+  characters, `est_tokens()` beside a real `o200k_base` count, each
+  rendering's declared lossiness, which one smallest-wins takes, the
+  cheapest lossless alternative when that differs, and the column that
+  made a spec format decline (those encoders are fail-open and
+  otherwise silent). Reads JSON, stdin, or a raw capture; parses via
+  ntc-templates when given `--command`/`--platform` so both tiers
+  compete as `compact()` runs them. Lives in `scripts/`: it needs
+  tiktoken and the tests' pinned encoding, neither of which the
+  zero-dependency runtime may touch.
 
 ## 0.2.0 — 2026-08-05
 

@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # by an abandoned 2019 package. Distribution, import, and CLI
 # share the one name.
 name = "neterse"
-version = "0.2.0"                     # keep in lockstep with neterse.__version__
+version = "0.3.0"                     # keep in lockstep with neterse.__version__
 description = "neterse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -51,7 +51,10 @@ textfsm = ["ntc-templates"]
 # Later phases: tokens = ["tiktoken"], …
 
 [tool.setuptools]
-packages = ["neterse", "neterse.specs"]
+# EVERY subpackage must be listed — an omission builds a wheel that
+# imports fine from a source checkout and fails on `pip install`.
+# tests/test_packaging.py enforces this against the tree.
+packages = ["neterse", "neterse.normalizers", "neterse.specs"]
 
 [tool.setuptools.package-data]
 neterse = ["py.typed"]
