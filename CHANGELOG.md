@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Corrected: `gcf-python` exists, and the original claim was right
+
+The 0.3.0 notes and decision 35 stated that GCF ships no Python
+implementation, and on that basis withdrew the Phase 6 commit's
+"verified against gcf-python 2.4.0". **That was wrong**, so the
+withdrawal is itself withdrawn — the original claim stands.
+
+PyPI **`gcf-python` 2.4.0** (MIT, zero dependencies, requires-python
+`>=3.9`) comes from `blackwell-systems/gcf-python`, the same org that
+publishes the spec, and exports `encode_generic` / `decode_generic`. The
+error came from testing PyPI for the name `gcf` — an unrelated Gadio
+scraper stuck at `0.0.3.dev3` — and concluding from one name miss that
+nothing existed.
+
+Re-verified against the real package: `parsed:gcf` is identical to
+`encode_generic` output modulo its trailing newline, and
+`decode_generic` round-trips our documents exactly, matching what the
+npm package already showed.
+
+TOON likewise now has an official Python package (`toon-format`, 0.1.0
+with a 0.9.0b1 beta, from `toon-format/toon-python`). Practical
+consequence: conformance for both formats can be checked in-process, so
+the differential harness no longer needs a Node hop. Neither package
+affects the runtime — `dependencies = []` is unchanged, and both remain
+verification-time tooling only.
+
 ## 0.3.1 — 2026-08-06
 
 Tooling only. `scripts/` ships in neither the wheel nor the sdist, so the
@@ -68,10 +96,7 @@ JSON-blob. A consumer pinned to those exact renderings is affected;
   dependency-free): every emitted TOON document decodes in
   `@toon-format/toon` 4.1.1 strict mode and every GCF document decodes
   in `@blackwell-systems/gcf` 2.4.0, both round-tripping exactly — over
-  a corpus of dict/JSON/API shapes and 1900 randomized row-sets. Both
-  reference implementations are **npm** packages; GCF ships no Python
-  package (PyPI `gcf` is an unrelated project), so an earlier claim of
-  verification against "gcf-python 2.4.0" was wrong and is withdrawn.
+  a corpus of dict/JSON/API shapes and 1900 randomized row-sets.
   Our output is byte-identical to both projects' own encoders modulo
   their trailing newline, with two known cosmetic divergences that
   round-trip either way: we leave commas unquoted where GCF quotes
