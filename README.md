@@ -87,7 +87,7 @@ A future library is a small source adapter
 
 The same payloads reach agents through MCP servers, and the client's
 server config is the one seam you control for every server — so neterse
-ships a proxy (`pip install "neterse[mcp]"`, Python 3.10+).
+ships a proxy (`pip install "neterse[mcp]"`).
 
 ### Wrap any server from your client's config
 
@@ -175,7 +175,7 @@ core imports the standard library only. Pick individually if you prefer:
 | `gcf` | `gcf-python` | the GCF authors' encoder — named tables, API envelopes, ragged rows |
 | `toon` | `toon-format` | the same, for TOON |
 | `tokens` | `tiktoken` | real token counts in `scripts/neterse_report.py` (the runtime stays chars/4) |
-| `mcp` | `fastmcp` (3.10+) | `neterse-mcp`, a proxy that compacts any MCP server's tool results, + `CompactMiddleware` for FastMCP servers |
+| `mcp` | `fastmcp` | `neterse-mcp`, a proxy that compacts any MCP server's tool results, + `CompactMiddleware` for FastMCP servers |
 
 Without `gcf`/`toon` the stdlib encoders stand in and cover fewer shapes;
 without `textfsm` you parse it yourself and pass `parsed=`. Everything

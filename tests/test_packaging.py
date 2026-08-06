@@ -20,17 +20,10 @@ milliseconds on every commit rather than only at tag time.
 from __future__ import annotations
 
 import re
-import sys
+import tomllib
 from pathlib import Path
 
 import pytest
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:                                             # 3.9/3.10 — optional
-    tomllib = pytest.importorskip(
-        "tomli", reason="needs tomllib (3.11+) or tomli to read pyproject"
-    )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"

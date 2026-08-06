@@ -41,11 +41,16 @@ the shipping artifact is a proxy.
   `outputSchema` but returns no structured output — listed tools shed
   `output_schema` while dedupe is on: the proxy's contract is "the text
   block is the payload".
-- **New extra `mcp`** (`fastmcp>=3`, marker-gated to Python 3.10+ so
-  `neterse[all]` still resolves on 3.9, where the extra installs nothing
-  and the adapters fail open). `dependencies = []` is untouched:
+- **New extra `mcp`** (`fastmcp>=3`). `dependencies = []` is untouched:
   `import neterse.mcp` works without the extra and `CompactMiddleware`
   names it at instantiation instead.
+- **Python 3.9 and 3.10 support dropped** (`requires-python >= 3.11`).
+  3.9 reaches end-of-life in October 2026, and the only thing either
+  version bought was ceremony: an environment marker keeping the `mcp`
+  extra (fastmcp needs 3.10+) from breaking `neterse[all]` resolution on
+  3.9, and a `tomli` fallback in the packaging tests. Both are gone;
+  3.9/3.10 users can stay on 0.4.1 — every extra there fails open, as
+  always. CI now runs 3.11–3.13.
 
 ## 0.4.1 — 2026-08-06
 

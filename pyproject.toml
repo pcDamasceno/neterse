@@ -10,7 +10,7 @@ name = "neterse"
 version = "0.5.0"                     # keep in lockstep with neterse.__version__
 description = "neterse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Pedro Damasceno" }]
 keywords = [
@@ -23,8 +23,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -69,10 +67,7 @@ tokens = ["tiktoken"]
 # that compacts ANY server's results from the client's config seam, and
 # CompactMiddleware for FastMCP servers you author. The pure seam
 # (compact_text / compact_result) is stdlib and works without this.
-# fastmcp needs 3.10+; the marker keeps `neterse[all]` resolving on 3.9,
-# where this extra installs nothing and the adapters fail open like any
-# other missing extra.
-mcp = ["fastmcp>=3; python_version >= '3.10'"]
+mcp = ["fastmcp>=3"]
 #
 # --- aggregates --------------------------------------------------------
 # Everything above, for people who would rather not track which capability
