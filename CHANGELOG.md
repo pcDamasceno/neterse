@@ -44,6 +44,45 @@ the shipping artifact is a proxy.
 - **New extra `mcp`** (`fastmcp>=3`). `dependencies = []` is untouched:
   `import neterse.mcp` works without the extra and `CompactMiddleware`
   names it at instantiation instead.
+- **`--header 'Name: value'`** (repeatable, curl-style) authenticates a
+  URL upstream — the `headers` block the client used to send to the
+  upstream directly moves onto the proxy's command line. Refused loudly
+  for stdio upstreams rather than silently dropped.
+
+### Constant-column folding — the same data in fewer bytes (decision 39)
+
+Live validation against a real ACI fabric and a real SD-WAN overlay
+showed header-once tables still repeating what controllers repeat: every
+object of an APIC class response carries the same class name and a dozen
+scheme defaults; SD-WAN device lists repeat site-wide versions.
+
+- **Columns identical in every row fold into one leading
+  `[N rows, each: col=value,...]` line**; the table keeps only the
+  varying columns. Lossless — names, values and the row count all
+  survive (the count matters when *every* column folds and no row lines
+  remain) — and applied only when strictly smaller, so small tables
+  render byte-identically: the entire pre-existing suite passed without
+  a single re-pin.
+- **New top-level candidate `parsed:fold`** (`parsed:csv` is unchanged —
+  candidates, not policy); inside `parsed:sections` tables — the MCP
+  envelope path — the fold applies in place. `parsed:toon`/`parsed:gcf`
+  never fold: neither spec has the construct.
+- **Numbers, 16-tool live corpus**: −52.9% → −61.0% chars vs the raw
+  wire text, −46.2% real o200k tokens; ACI bridge domains −67% → −78%,
+  tenants −56% → −70%, SD-WAN device list −55% → −63%. Identity
+  fidelity (every name/dn/system-ip) re-verified through the proxy.
+
+### Vendor API shapes: capture-first contribution (decision 40)
+
+- **`tests/fixtures/api_shapes/<vendor>/<name>.json`** — drop one real
+  controller response and the suite auto-asserts it shrinks, stays
+  declared-lossless, keeps every identity value verbatim, and fails
+  open; no per-vendor test code. Seeded with the live ACI and SD-WAN
+  captures (RFC1918 lab fabrics). The YAML-subtree DSL considered for
+  vendor envelopes is declined: the sections encoder already finds rows
+  at any depth, and what remains is per-item transformation — code, per
+  the existing spec-key rule. Normalizers stay the escape hatch
+  (`cisco_aci.py` is the template, ~30 lines).
 - **Python 3.9 and 3.10 support dropped** (`requires-python >= 3.11`).
   3.9 reaches end-of-life in October 2026, and the only thing either
   version bought was ceremony: an environment marker keeping the `mcp`

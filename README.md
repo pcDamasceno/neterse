@@ -115,18 +115,40 @@ A stdio upstream is the original command line, verbatim:
 ```
 
 (the proxy forwards its full environment to a stdio upstream, so `env`
-blocks keep working). No global install needed —
+blocks keep working). An authenticated URL upstream moves its `headers`
+block onto the command line, curl-style and repeatable:
+
+```json
+"sdwan": {
+  "command": "neterse-mcp",
+  "args": ["https://vmanage-mcp.example.com/mcp",
+           "--header", "Authorization: Bearer TOKEN"]
+}
+```
+
+No global install needed —
 `"command": "uvx", "args": ["--from", "neterse[mcp]", "neterse-mcp", ...]`
 resolves it on the fly, and from a source checkout use
-`"command": "uv", "args": ["run", "--with-editable", "/path/to/neterse",
-"--with", "fastmcp", "neterse-mcp", ...]`.
+`"command": "uv", "args": ["run", "--isolated", "--with-editable",
+"/path/to/neterse", "--with", "fastmcp", "neterse-mcp", ...]` —
+`--isolated` matters: without it, a workspace venv that has any released
+`neterse` installed can shadow the checkout and silently run old code
+(`uvx` is isolated by nature).
 
 Restart the server entry and watch its output/log pane: every compacted
 call prints one ledger line on stderr —
 
 ```
-[neterse] aci_bridge_domains_get: 30,190 -> 9,866 chars (~7,547 -> ~2,466 tok, -67%)
+[neterse] aci_bridge_domains_get: 30,190 -> 6,617 chars (~7,547 -> ~1,654 tok, -78%)
 ```
+
+Across a 16-tool live corpus (a real ACI fabric and a real SD-WAN
+overlay) the proxy removes 61% of the characters — measured 46% of the
+real o200k tokens. Redundancy folds instead of repeating: a column whose
+value is identical in every row (an ACI class response repeats the class
+name and a dozen defaults per object) collapses to one leading
+`[31 rows, each: _class=fvBD,lcOwn=local,...]` line, values intact, row
+count preserved — lossless, like everything on the default path.
 
 ### What the model sees
 

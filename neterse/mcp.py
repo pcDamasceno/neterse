@@ -273,6 +273,21 @@ else:
             )
 
 
+def _parse_headers(pairs: List[str]) -> dict:
+    """curl-style ``'Name: value'`` strings → a headers dict, or
+    ``ValueError`` naming the malformed one. Splitting on the FIRST colon
+    keeps ``Authorization: Bearer x:y`` intact."""
+    headers = {}
+    for pair in pairs:
+        name, sep, value = pair.partition(":")
+        if not sep or not name.strip():
+            raise ValueError(
+                f"--header needs 'Name: value' (curl style), got {pair!r}"
+            )
+        headers[name.strip()] = value.strip()
+    return headers
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """``neterse-mcp`` — a stdio proxy that compacts any MCP server's
     tool results. The upstream is a streamable-HTTP URL or the stdio
@@ -294,6 +309,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         help=(
             "streamable-HTTP URL (https://host/mcp) or the stdio command "
             "line that starts the upstream server (docker run ... / npx ...)"
+        ),
+    )
+    parser.add_argument(
+        "--header",
+        action="append",
+        default=[],
+        metavar="'Name: value'",
+        help=(
+            "HTTP header for a URL upstream, curl-style and repeatable "
+            "(e.g. --header 'Authorization: Bearer TOKEN'). The headers "
+            "block the client used to send to the upstream directly moves "
+            "here when the proxy takes its place. URL upstreams only."
         ),
     )
     parser.add_argument(
@@ -326,7 +353,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     upstream = args.upstream
     if len(upstream) == 1 and upstream[0].startswith(("http://", "https://")):
         backend: Any = upstream[0]
+        if args.header:
+            try:
+                headers = _parse_headers(args.header)
+            except ValueError as exc:
+                parser.error(str(exc))
+            from fastmcp.client.transports import StreamableHttpTransport
+
+            backend = StreamableHttpTransport(upstream[0], headers=headers)
     else:
+        if args.header:
+            # Silently ignoring an auth header would leave the upstream
+            # unauthenticated with no hint why — refuse instead.
+            parser.error("--header applies to URL upstreams only")
         import os
 
         from fastmcp.client.transports import StdioTransport
