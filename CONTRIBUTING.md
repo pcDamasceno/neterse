@@ -84,7 +84,7 @@ into a subtree (dotted for nesting: `--key data.imdata`), `--show` to
 print the renderings themselves.
 
 The report is most useful with the reference encoders and a real
-tokenizer present — `pip install -e '.[gcf,toon]'` plus `tiktoken`.
+tokenizer present — `pip install -e '.[all]'` installs all of it.
 `uv run scripts/neterse_report.py <file>` provisions all three itself
 (PEP 723 metadata in the script). Without them it still runs, but
 `parsed:toon`/`parsed:gcf` cover fewer shapes and `saved` falls back to
@@ -218,6 +218,12 @@ def my_shape(value):
 
 ```bash
 git clone https://github.com/pcDamasceno/neterse && cd neterse
-pip install -e ".[test]"      # pytest + PyYAML (spec authoring/drift gate)
+pip install -e ".[test]"      # pytest + PyYAML + the encoder extras (what CI installs)
 pytest                        # ~2000 tests, a couple of seconds, no network
 ```
+
+`.[test]` is the CI configuration exactly. Add `.[test,all]` for the
+report tool at full power — it brings ntc-templates and tiktoken too, and
+un-skips `tests/test_token_savings.py` (pin `tiktoken==0.13.0` to match
+the committed baseline). Tests skip rather than fail when an extra is
+absent, so a bare `.[test]` checkout is still a green one.

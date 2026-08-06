@@ -203,7 +203,7 @@ def report(
     print(f"baseline: {what}")
     print(f"          {b_chars} chars | {b_chars // 4} est tok"
           + (f" | {b_tokens} real tok ({ENCODING})" if b_tokens else
-             " | real tokens unavailable (pip install tiktoken)"))
+             " | real tokens unavailable (pip install 'neterse[tokens]')"))
     print(f"profile:  {profile}\n")
 
     if not candidates:
@@ -280,8 +280,11 @@ def report(
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description=__doc__.splitlines()[0],
-        epilog="tiktoken is optional; without it 'saved' falls back to "
-               "characters, which overstates token savings.",
+        epilog="Everything this reads is optional and named in one place: "
+               "pip install 'neterse[all]'. Without a tokenizer 'saved' "
+               "falls back to characters, which overstates token savings; "
+               "without the encoder extras, fewer shapes produce a "
+               "parsed:toon/parsed:gcf candidate at all.",
     )
     ap.add_argument("path", help="JSON file, raw capture, or - for stdin")
     ap.add_argument("--key", help="also report on this subtree alone, dotted "
