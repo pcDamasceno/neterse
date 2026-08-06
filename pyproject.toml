@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # by an abandoned 2019 package. Distribution, import, and CLI
 # share the one name.
 name = "neterse"
-version = "0.4.0"                     # keep in lockstep with neterse.__version__
+version = "0.4.1"                     # keep in lockstep with neterse.__version__
 description = "neterse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -42,9 +42,7 @@ Issues = "https://github.com/pcDamasceno/neterse/issues"
 neterse = "neterse.audit:main"
 
 [project.optional-dependencies]
-# PyYAML is authoring-time tooling only (scripts/compile_specs.py and the
-# spec drift test) — the runtime imports the generated _compiled.py.
-test = ["pytest", "PyYAML", "gcf-python>=2.4", "toon-format>=0.9.0b1"]
+# --- capability extras: each one widens what neterse can do -------------
 # Drives ntc-templates/TextFSM from neterse.ntc: parse + render in one
 # call. The core never imports it — everything fails open without it.
 textfsm = ["ntc-templates"]
@@ -55,12 +53,33 @@ textfsm = ["ntc-templates"]
 # Absent, the stdlib encoders stand in; nothing here is ever required.
 gcf = ["gcf-python>=2.4"]
 # toon-format's 0.1.0 "stable" ships an encoder that raises
-# NotImplementedError, so the floor is the pre-release that works. The
-# specifier names it explicitly, which is what lets pip resolve a
-# pre-release here without a global --pre. Needs Python >=3.10, so this
-# extra simply does not install on 3.9 — by design, it fails open.
+# NotImplementedError, so the floor is the pre-release that works — and
+# 0.9.0b1 > 0.1.0 under PEP 440, so this pins to it exactly. Naming the
+# pre-release in the specifier is what lets pip resolve one here without
+# a global --pre.
 toon = ["toon-format>=0.9.0b1"]
-# Later phases: tokens = ["tiktoken"], …
+# Real token counts for scripts/neterse_report.py and the CI savings
+# gate. Deliberately NOT a runtime concern: Candidate.est_tokens() is
+# chars/4 (decision 8) and the package never imports a tokenizer, so
+# this changes what the tooling can measure, not what the library does.
+tokens = ["tiktoken"]
+#
+# --- aggregates --------------------------------------------------------
+# Everything above, for people who would rather not track which capability
+# lives in which extra. Still installs nothing the library imports: the
+# runtime dependency list stays empty and every extra fails open.
+# `test` is out on purpose — pytest and PyYAML are for working ON neterse,
+# not with it. tests/test_packaging.py gates this list against the extras
+# above so a new capability cannot quietly go missing from it.
+all = ["neterse[gcf,textfsm,toon,tokens]"]
+full = ["neterse[all]"]              # alias; both spellings get guessed
+#
+# --- development -------------------------------------------------------
+# PyYAML is authoring-time tooling only (scripts/compile_specs.py and the
+# spec drift test) — the runtime imports the generated _compiled.py. The
+# encoder extras come in by reference so the version floors above are the
+# only ones: CI must test the versions users actually resolve.
+test = ["neterse[gcf,toon]", "pytest", "PyYAML"]
 
 [tool.setuptools]
 # EVERY subpackage must be listed — an omission builds a wheel that

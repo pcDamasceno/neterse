@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.4.1 — 2026-08-06
+
+### One extra that installs the lot (decision 37)
+
+```
+pip install "neterse[all]"     # or [full] — same set
+```
+
+0.4.0 shipped the fourth optional extra, and the install line for a fully
+capable neterse became something you had to assemble from the docs. `all`
+is the whole capability set, with `full` as an alias because both names
+get guessed.
+
+- **New extra: `tokens`** (`tiktoken`). It was the one optional package
+  with no name to install it by — `scripts/neterse_report.py` and the CI
+  savings gate use it, so people were told to `pip install tiktoken`
+  alongside. Naming it changes nothing at runtime: `est_tokens()` is
+  still chars/4 (decision 8) and the package still imports no tokenizer.
+- **`all` covers capabilities, not tooling.** `textfsm`, `gcf`, `toon`,
+  `tokens` — everything that widens what neterse can do. `test` (pytest,
+  PyYAML) stays out: it is for working *on* neterse.
+- **`dependencies = []` is untouched.** `[all]` installs nothing the
+  library imports; every extra remains fail-open, so a missing one costs
+  candidates, never a traceback.
+- **The aggregate is gated.** An `all` list is a hand-maintained copy of
+  the extras list and decays the first time someone adds an extra and
+  edits one place — silently, since `[all]` still installs. `tests/
+  test_packaging.py` now fails if a non-dev extra is unreachable from
+  `all`, if `full` and `all` disagree, or if a `neterse[...]`
+  self-reference names an extra that does not exist (pip only warns).
+- The `test` extra now pulls the encoder floors by reference
+  (`neterse[gcf,toon]`) instead of restating them, so CI cannot end up
+  testing a different `toon-format` than users resolve.
+
+Also corrected: the `toon` extra's comment claimed it does not install on
+Python 3.9. It does — `toon-format` 0.9.0b1 declares `>=3.8`, and it is
+the only version `>=0.9.0b1` matches (0.9.0b1 > 0.1.0 under PEP 440).
+`neterse[all]` resolves on every supported Python, 3.9 included.
+
 ## 0.4.0 — 2026-08-06
 
 ### The spec authors' encoders, as optional extras (decision 36)

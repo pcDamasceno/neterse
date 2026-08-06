@@ -87,8 +87,22 @@ A future library is a small source adapter
 
 ```bash
 pip install neterse                # zero dependencies, import name: neterse
-pip install "neterse[textfsm]"     # + ntc-templates: parse & compress in one call
+pip install "neterse[all]"         # every optional capability below (or [full])
 ```
+
+Nothing is ever required — each extra widens what neterse can do and the
+core imports the standard library only. Pick individually if you prefer:
+
+| extra | pulls in | what it buys |
+| --- | --- | --- |
+| `textfsm` | `ntc-templates` | `neterse.ntc` parses *and* compresses in one call |
+| `gcf` | `gcf-python` | the GCF authors' encoder — named tables, API envelopes, ragged rows |
+| `toon` | `toon-format` | the same, for TOON |
+| `tokens` | `tiktoken` | real token counts in `scripts/neterse_report.py` (the runtime stays chars/4) |
+
+Without `gcf`/`toon` the stdlib encoders stand in and cover fewer shapes;
+without `textfsm` you parse it yourself and pass `parsed=`. Everything
+fails open, so a missing extra costs you candidates, never a traceback.
 
 > Named **neterse** ("network terse") because the natural name `terse` is
 > occupied on PyPI by an unrelated package abandoned in 2019. Distribution,
