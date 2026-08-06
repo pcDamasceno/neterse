@@ -78,6 +78,8 @@ from __future__ import annotations
 import json
 import re
 from decimal import Decimal
+from importlib import import_module
+from math import copysign
 from typing import Any, List, Optional, Tuple
 
 from . import normalizers
@@ -202,13 +204,19 @@ def _number_literal(value) -> Optional[str]:
     """Canonical number under both specs' shared rules: plain decimal
     (integer form when the fraction is zero) inside ``[1e-6, 1e21)``,
     exponent form outside, never a leading/trailing zero. ``None`` for
-    non-finite values — the caller maps those to its null."""
+    non-finite values — the caller declines the document.
+
+    Signed zero and the exponent sign follow the reference encoders
+    rather than Python's ``repr``: ``-0.0`` keeps its sign and the
+    exponent keeps its ``+``, so our bytes match ``gcf-python`` and
+    ``toon-format`` instead of merely round-tripping through them."""
     if isinstance(value, int):
         return str(value)
     if value != value or value in (float("inf"), float("-inf")):
         return None
     if value == int(value) and abs(value) < 1e21:
-        return str(int(value))
+        sign = "-" if value == 0 and copysign(1.0, value) < 0 else ""
+        return sign + str(int(value))
     text = repr(value)
     match = _EXPONENT_FORM.match(text)
     if match and 1e-6 <= abs(value) < 1e21:
@@ -217,7 +225,7 @@ def _number_literal(value) -> Optional[str]:
             text = text.rstrip("0").rstrip(".")
     elif match:
         text = match.group(1) + "e" + (
-            "-" if match.group(2) == "-" else ""
+            "-" if match.group(2) == "-" else "+"
         ) + match.group(3)
     return text
 
@@ -334,6 +342,10 @@ def _gcf_string(s: str) -> str:
         or "|" in s
         or '"' in s
         or "\\" in s
+        # Not a row delimiter, but the reference encoder quotes it (a
+        # comma separates field names in the section header and elements
+        # in an array sidecar), and matching its bytes is the point.
+        or "," in s
         or _CONTROL_CHARS.search(s)
         # A leading '#' can forge the '## [N]{fields}' section header when
         # the cell lands in column 1 — a decoder then reads the row as a
@@ -595,11 +607,125 @@ def _encode_sections(parsed: Any, profile: str) -> Optional[Encoded]:
     return "\n".join(lines), "parsed:sections", tuple(dropped), applied
 
 
+# ---------------------------------------------------------------------------
+# The specs' own encoders, when the optional extras are installed
+# ---------------------------------------------------------------------------
+# `pip install neterse[gcf]` / `neterse[toon]`. They SUPPLEMENT the
+# stdlib encoders rather than replacing them: a reference encoder is
+# consulted only for a candidate our own implementation declined.
+#
+# Why supplement and not replace. The row model and the reference
+# encoders read the same payload differently — a bare dict is one ROW to
+# us and an OBJECT to them (`[1]{hostname,os}:` vs `hostname: sw1`) — so
+# preferring the vendor would silently change settled output for the
+# commonest input in the library. And there is nothing to gain by it: on
+# every shape both can express the bytes are already identical (4000
+# randomized row-sets, zero divergences; the one remaining disagreement
+# is NaN, which `_reference_safe` refuses to delegate anyway). So the
+# stdlib path keeps the shapes it always had, byte for byte, whether or
+# not an extra is installed.
+#
+# What delegation buys is exactly the shapes we cannot express at all —
+# the named table (`employees[3]{...}`), whole API envelopes, ragged
+# rows, array cells. Those declined before and now encode, which is the
+# entire point: roughly half of all row-sets we refuse, a reference
+# encoder handles.
+#
+# Optional means optional: the runtime dependency list stays empty and
+# every failure path here yields no candidate rather than an exception.
+
+_REFERENCE_ENCODERS = (
+    # (candidate source, module, encoder, decoder) — module names differ
+    # from the distributions: `pip install toon-format` imports as
+    # `toon_format`, `pip install gcf-python` imports as `gcf`.
+    ("parsed:toon", "toon_format", "encode", "decode"),
+    ("parsed:gcf", "gcf", "encode_generic", "decode_generic"),
+)
+
+
+def _reference_safe(value: Any) -> bool:
+    """True when handing *value* to a reference encoder cannot lose data.
+
+    Both packages coerce rather than refuse, and they do it quietly:
+
+    * NaN and ±inf are written as ``0`` (both encoders).
+    * A type outside the JSON model — ``Decimal``, ``datetime``, any
+      object we would otherwise stringify — becomes ``null``
+      (``toon_format`` logs a warning and carries on).
+
+    Either would produce a candidate reporting ``dropped_fields == ()``
+    while silently changing the data, which is invariant 4 violated by
+    proxy. So we screen first and let our own encoders — which stringify
+    exotics via ``_cell`` and decline non-finite floats — take those
+    payloads instead.
+    """
+    if value is None or isinstance(value, (str, bool, int)):
+        return True
+    if isinstance(value, float):
+        return value == value and value not in (float("inf"), float("-inf"))
+    if isinstance(value, dict):
+        return all(isinstance(k, str) and _reference_safe(v)
+                   for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return all(_reference_safe(v) for v in value)
+    return False
+
+
+def _canonical(value: Any) -> Any:
+    """Round-trip comparison form: tuples and lists are the same JSON
+    array, and a decoder can only ever hand back a list."""
+    if isinstance(value, dict):
+        return {k: _canonical(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canonical(v) for v in value]
+    return value
+
+
+def _reference_encoded(parsed: Any) -> List[Encoded]:
+    """``parsed:toon`` / ``parsed:gcf`` straight from the specs' packages.
+
+    Hands over the *normalized rows* when a normalizer claimed the
+    payload — that unwrapping is neterse's own contribution and the
+    other candidates encode it too — and otherwise the document exactly
+    as given, so the encoder can reach for its named-table and envelope
+    forms.
+    """
+    payload = normalizers.normalize(parsed)
+    if payload is None:
+        payload = parsed
+    if not _reference_safe(payload):
+        return []
+    out: List[Encoded] = []
+    for source, module, encoder, decoder in _REFERENCE_ENCODERS:
+        try:
+            package = import_module(module)
+            text = getattr(package, encoder)(payload)
+            # Prove it before we claim it. These encoders coerce rather
+            # than refuse — NaN silently becomes 0, an unsupported type
+            # silently becomes null, and a ragged row-set may have its
+            # gaps materialized as null, which is the very fabrication
+            # our own TOON encoder declines §9.3 over. A candidate that
+            # cannot be read back is not lossless, and invariant 4 says
+            # lossiness must be DECLARED, so anything that fails to
+            # round-trip through the vendor's own decoder is dropped.
+            if _canonical(getattr(package, decoder)(text)) != _canonical(payload):
+                continue
+        except Exception:
+            # Not installed, too old to have an encoder (toon-format
+            # 0.1.0 ships one that raises NotImplementedError), or it
+            # refused this payload. All the same to us.
+            continue
+        if isinstance(text, str) and text.strip():
+            out.append((text.rstrip("\n"), source, (), "default"))
+    return out
+
+
 def encode(parsed: Any, profile: str = "default") -> List[Encoded]:
     """Encode pre-parsed rows compactly; empty list when *parsed* isn't
     row-shaped. The caller owns the shrink gate and Candidate wrapping."""
     encoded: List[Encoded] = []
     items = _rows(parsed)
+    dropped: Tuple[str, ...] = ()
     if items is not None:
         cols = _columns(items)
         if cols:
@@ -623,6 +749,21 @@ def encode(parsed: Any, profile: str = "default") -> List[Encoded]:
             gcf = _gcf_encoded(items, kept, dropped)
             if gcf is not None:
                 encoded.append(gcf)
+    # A projection has no in-document home for the omission marker in
+    # either spec, so a projected payload declines here exactly as it
+    # does above; and a non-default profile we could not even apply
+    # (nothing row-shaped to project) must not yield an unprojected
+    # candidate pretending otherwise.
+    if encoded and not dropped:
+        # Guarded by `encoded` being non-empty, which means the payload
+        # was row-shaped with at least one column: the parsed tier's own
+        # domain. Shapes it declines outright — scalars, bare string
+        # lists, mixed lists — stay declined, because widening THAT is a
+        # contract change (`render_parsed` promises no candidates) and
+        # not what delegation is for.
+        already = {source for _, source, _, _ in encoded}
+        encoded.extend(reference for reference in _reference_encoded(parsed)
+                       if reference[1] not in already)
     sections = _encode_sections(parsed, profile)
     if sections is not None:
         encoded.append(sections)

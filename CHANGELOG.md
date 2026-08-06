@@ -1,5 +1,97 @@
 # Changelog
 
+## 0.4.0 — 2026-08-06
+
+### The spec authors' encoders, as optional extras (decision 36)
+
+```
+pip install neterse[gcf]     # gcf-python  -> parsed:gcf
+pip install neterse[toon]    # toon-format -> parsed:toon
+```
+
+Installed, they **supplement** the stdlib encoders: consulted only for a
+candidate our own implementation declined. What that buys is the document
+forms a flat row table cannot express — above all the **named table**.
+
+`{"employees": [...]}` is, to the row model, a single row whose one
+column holds an array, which both specs' tabular forms refuse. So it
+produced no spec candidate at all, no matter that the payload is as
+tabular as data gets. Now:
+
+```
+employees[3]{id,name,department,salary}:      ## employees [3]{id,name,department,salary}
+  1,Alice,Engineering,95000                   1|Alice|Engineering|95000
+```
+
+Same for whole API envelopes (`totalCount="2"` beside `## imdata [2]{id}`),
+ragged rows, and array cells. Across 4000 randomized row-sets a reference
+encoder handles roughly **half** the shapes we decline.
+
+- **Supplement, not replace.** The row model and the reference encoders
+  read the same payload differently — a bare dict is one ROW to us and an
+  OBJECT to them (`[1]{hostname,os}:` vs `hostname: sw1`) — so preferring
+  the vendor would silently reshape the commonest input in the library.
+  There is also nothing to win: on every shape both can express the bytes
+  are now identical. Installing an extra adds candidates; it never
+  rewrites one.
+- **Delegated documents are verified, not trusted.** Both packages coerce
+  rather than refuse — NaN and ±inf become `0`, an unsupported type
+  becomes `null` (`toon-format` logs a warning and carries on), and a
+  ragged row-set can have its gaps materialized. Every delegated document
+  is read back through that vendor's own decoder and dropped unless it
+  reproduces the payload exactly, so `dropped_fields == ()` keeps meaning
+  what invariant 4 says it means.
+- **Scope is unchanged.** Shapes the parsed tier declines outright —
+  scalars, bare string lists, mixed lists — stay declined; widening
+  `render_parsed`'s contract is a separate decision, not a side effect of
+  installing a package. Applied projections still decline in both formats.
+- **Zero runtime dependencies still.** `dependencies = []` is untouched
+  and the release workflow still fails the build if that changes. Every
+  failure path — not installed, too old, encoder refused — yields no
+  candidate rather than an exception.
+
+### Fixed: three cell encodings that disagreed with the reference
+
+Found by diffing our output against `gcf-python` over 4000 row-sets;
+previously documented as "cosmetic divergences that round-trip either
+way", which was true and beside the point once both paths must produce
+the same bytes.
+
+- A string containing a comma now quotes (`"a,b"`). Not a GCF row
+  delimiter, but it separates field names in the section header and
+  elements in an array sidecar, and the reference quotes it.
+- `-0.0` keeps its sign (`-0`, was `0`).
+- Exponent form keeps its `+` (`1e+21`, was `1e21`).
+
+`parsed:toon` shares the number path, so its two number cases change with
+it. `parsed:csv` and `parsed:sections` are untouched.
+
+### Corrected: `gcf-python` exists, and the original claim was right
+
+The 0.3.0 notes and decision 35 stated that GCF ships no Python
+implementation, and on that basis withdrew the Phase 6 commit's
+"verified against gcf-python 2.4.0". **That was wrong**, so the
+withdrawal is itself withdrawn — the original claim stands.
+
+PyPI **`gcf-python` 2.4.0** (MIT, zero dependencies, requires-python
+`>=3.9`) comes from `blackwell-systems/gcf-python`, the same org that
+publishes the spec, and exports `encode_generic` / `decode_generic`. The
+error came from testing PyPI for the name `gcf` — an unrelated Gadio
+scraper stuck at `0.0.3.dev3` — and concluding from one name miss that
+nothing existed.
+
+Re-verified against the real package: `parsed:gcf` is identical to
+`encode_generic` output modulo its trailing newline, and
+`decode_generic` round-trips our documents exactly, matching what the
+npm package already showed.
+
+TOON likewise now has an official Python package (`toon-format`, 0.1.0
+with a 0.9.0b1 beta, from `toon-format/toon-python`). Practical
+consequence: conformance for both formats can be checked in-process, so
+the differential harness no longer needs a Node hop. Neither package
+affects the runtime — `dependencies = []` is unchanged, and both remain
+verification-time tooling only.
+
 ## 0.3.1 — 2026-08-06
 
 Tooling only. `scripts/` ships in neither the wheel nor the sdist, so the
@@ -68,10 +160,7 @@ JSON-blob. A consumer pinned to those exact renderings is affected;
   dependency-free): every emitted TOON document decodes in
   `@toon-format/toon` 4.1.1 strict mode and every GCF document decodes
   in `@blackwell-systems/gcf` 2.4.0, both round-tripping exactly — over
-  a corpus of dict/JSON/API shapes and 1900 randomized row-sets. Both
-  reference implementations are **npm** packages; GCF ships no Python
-  package (PyPI `gcf` is an unrelated project), so an earlier claim of
-  verification against "gcf-python 2.4.0" was wrong and is withdrawn.
+  a corpus of dict/JSON/API shapes and 1900 randomized row-sets.
   Our output is byte-identical to both projects' own encoders modulo
   their trailing newline, with two known cosmetic divergences that
   round-trip either way: we leave commas unquoted where GCF quotes
