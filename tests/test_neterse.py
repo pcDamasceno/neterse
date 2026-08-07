@@ -377,3 +377,185 @@ def test_ios_bgp_summary_golden():
         "10.0.0.1,65001,25\n"
         "10.0.0.5,65002,Idle"
     )
+
+
+# ===========================================================================
+# Run-821cd8e9 coverage gaps (NX-OS troubleshooting families)
+# ===========================================================================
+
+_INVENTORY = """\
+NAME: "Chassis",  DESCR: "Nexus3500 C3548P-XL Chassis"
+PID: N3K-C3548P-XL       ,  VID: V04 ,  SN: FOC2820R09V
+
+NAME: "Fan 1",  DESCR: "Nexus3500 C3548P-XL Chassis Fan Module"
+PID: NXA-FAN-30CFM-F     ,  VID: V00 ,  SN: N/A
+"""
+
+
+def test_inventory_two_line_entries_to_csv():
+    out = optimize("show inventory", _INVENTORY)
+    lines = out.splitlines()
+    assert lines[0] == "name,descr,pid,vid,sn"
+    assert lines[1] == "Chassis,Nexus3500 C3548P-XL Chassis,N3K-C3548P-XL,V04,FOC2820R09V"
+    assert lines[2] == "Fan 1,Nexus3500 C3548P-XL Chassis Fan Module,NXA-FAN-30CFM-F,V00,N/A"
+    assert len(out) < len(_INVENTORY)
+
+
+def test_inventory_fails_open_on_unexpected_line():
+    raw = 'NAME: "X",  DESCR: "Y"\nnot a pid line\nPID: P , VID: V , SN: S'
+    assert optimize("show inventory", raw) == raw
+
+
+_HWERR = """\
+|------------------------------------------------------------------------|
+| Device: L2/L3 forwarding ASIC   Role:MAC                     Mod: 1    |
+| Last cleared @ Sat Apr 26 08:56:22 2025
+| Device Statistics Category :: ERROR
+|------------------------------------------------------------------------|
+Instance:0
+ID          Name                                          Value             Ports
+--          ----                                          -----             -----
+310         MTC_MB_CRC_ERR_CNT_PORT3                      0000000000000002  4 -
+314         MTC_MB_CRC_ERR_CNT_PORT7                      0000000000001185  8 -
+999         ZERO_COUNTER                                  0000000000000000  9 -
+|------------------------------------------------------------------------|
+| Device: L2/L3 forwarding ASIC   Role:MAC                     Mod: 1    |
+| Device Statistics Category :: QOS
+|------------------------------------------------------------------------|
+"""
+
+
+def test_hardware_errors_strips_padding_and_banners():
+    out = optimize("show hardware internal errors module 1", _HWERR)
+    assert "[ERROR] mod=1 instance=0" in out
+    assert "id,name,value,ports" in out
+    assert "310,MTC_MB_CRC_ERR_CNT_PORT3,2,4 -" in out          # leading zeros gone
+    assert "314,MTC_MB_CRC_ERR_CNT_PORT7,1185,8 -" in out
+    assert "ZERO_COUNTER" not in out                            # all-zero row dropped
+    assert "(+1 zero rows omitted)" in out                      # but its absence stays explicit
+    assert "[QOS] mod=1 (none)" in out                          # empty category kept explicit
+    assert "----" not in out                                    # box banners gone
+    assert len(out) < len(_HWERR)
+
+
+def test_hardware_errors_fails_open_without_sections():
+    raw = "some diagnostic dump\nwith no category banner\nID 1 2 3"
+    assert optimize("show hardware internal errors module 1", raw) == raw
+
+
+_ENV = """\
+Power Supply:
+-----------------------------------------------------------
+PS  Model                Input Power       Current   Status
+-----------------------------------------------------------
+1   N2200-PAC-400W       AC  396.00       33.00   ok
+--- ---------------------- -------   ----------  ----------
+Fan:
+Fan1(sys_fan1)  NXA-FAN-30CFM-F      0.0    front-to-back   Ok
+"""
+
+
+def test_environment_drops_separators_and_squeezes():
+    out = optimize("show environment", _ENV)
+    assert "1 N2200-PAC-400W AC 396.00 33.00 ok" in out
+    assert "Fan1(sys_fan1) NXA-FAN-30CFM-F 0.0 front-to-back Ok" in out
+    assert "-----" not in out                                   # dash / dash+space rules gone
+    assert "PS Model Input Power Current Status" in out         # data preserved, squeezed
+    assert len(out) < len(_ENV)
+
+
+_XCVR_DETAILS = """\
+Ethernet1/34
+    transceiver is present
+    type is 10Gbase-LR
+    serial number is ACW26160UE9
+
+           SFP Detail Diagnostics Information (internal calibration)
+  ----------------------------------------------------------------------------
+                Current              Alarms                  Warnings
+                Measurement     High        Low         High          Low
+  ----------------------------------------------------------------------------
+  Temperature   35.17 C        75.00 C     -5.00 C     70.00 C        0.00 C
+  Rx Power      -5.19 dBm       3.49 dBm  -18.38 dBm    0.49 dBm    -14.40 dBm
+  Transmit Fault Count = 0
+  ----------------------------------------------------------------------------
+  Note: ++  high-alarm; +  high-warning; --  low-alarm; -  low-warning
+"""
+
+
+def test_transceiver_details_keeps_current_drops_thresholds():
+    out = optimize("show interface ethernet1/34 transceiver details", _XCVR_DETAILS)
+    assert "Ethernet1/34:" in out
+    assert "type=10Gbase-LR" in out
+    assert "serial_number=ACW26160UE9" in out
+    assert "temperature=35.17 C" in out                         # current measurement kept
+    assert "rx_power=-5.19 dBm" in out
+    assert "transmit_fault_count=0" in out
+    assert "75.00" not in out and "18.38" not in out            # alarm/warning thresholds dropped
+    assert "high-alarm" not in out                              # legend dropped
+    assert len(out) < len(_XCVR_DETAILS)
+
+
+def test_transceiver_details_declares_dropped_thresholds():
+    [cand] = render(_XCVR_DETAILS, command="show interface e1/34 transceiver details")
+    assert cand.source == "_compress_transceiver_details"
+    assert cand.dropped_fields == ("dom_alarm_warning_thresholds",)
+
+
+_SYSLOG = """\
+2025 Oct 17 23:30:06 RFRA3217 %ETHPORT-5-IF_DOWN_LINK_FAILURE: Interface Ethernet1/38 is down (Link failure)
+2025 Oct 18 00:33:41 RFRA3217 %ETHPORT-5-SPEED: Interface Ethernet1/38, operational speed changed to 10 Gbps
+2025 Oct 18 00:33:41 RFRA3217 %ETHPORT-5-IF_DUPLEX: Interface Ethernet1/38, operational duplex mode changed to Full
+2025 Oct 18 00:33:41 RFRA3217 %ETHPORT-5-IF_RX_FLOW_CONTROL: Interface Ethernet1/38, Receive Flow Control changed to off
+2025 Oct 18 00:33:41 RFRA3217 %ETHPORT-5-IF_TX_FLOW_CONTROL: Interface Ethernet1/38, Transmit Flow Control changed to off
+2025 Oct 18 00:33:41 RFRA3217 %ETHPORT-5-IF_UP: Interface Ethernet1/38 is up in Layer3
+2025 Oct 22 13:33:50 RFRA3217 %ETHPORT-5-IF_DOWN_LINK_FAILURE: Interface Ethernet1/38 is down (Link failure)
+2025 Oct 22 19:26:08 RFRA3217 %ETHPORT-5-IF_UP: Interface Ethernet1/38 is up in Layer3
+2025 Nov 28 22:36:11 RFRA3217 %ETHPORT-5-IF_DOWN_ADMIN_DOWN: Interface Ethernet1/35 is down (Administratively down)
+2025 Dec  1 14:21:50 RFRA3217 %ETHPORT-5-IF_ADMIN_UP: Interface Ethernet1/35 is admin up .
+[TRUNCATED — older lines omitted]
+"""
+
+
+def test_syslog_factors_out_constant_host():
+    out = optimize("show logging last 200", _SYSLOG)
+    assert out.startswith("host RFRA3217; syslog")
+    assert "2025 Oct 17 23:30:06 %ETHPORT-5-IF_DOWN_LINK_FAILURE:" in out
+    assert " RFRA3217 %ETHPORT" not in out                      # host elided from records
+    assert "[TRUNCATED — older lines omitted]" in out           # non-record line preserved
+    assert len(out) < len(_SYSLOG)
+
+
+def test_syslog_fails_open_on_multiple_hosts():
+    raw = (
+        "2025 Oct 17 23:30:06 SW1 %ETHPORT-5-IF_UP: up\n"
+        "2025 Oct 17 23:30:07 SW2 %ETHPORT-5-IF_UP: up\n"
+        "2025 Oct 17 23:30:08 SW1 %ETHPORT-5-IF_UP: up\n"
+    )
+    assert optimize("show logging last 200", raw) == raw
+
+
+_CAPABILITIES = """\
+Ethernet1/35
+  Model:                 N3K-C3548P-XL
+  Type (SFP capable):    10Gbase-LR
+  Speed:                 100,1000,10000,auto
+  Duplex:                full
+  Port mode:             Routed,Switched
+"""
+
+
+def test_interface_capabilities_key_value_squeeze():
+    out = optimize("show interface ethernet1/35 capabilities", _CAPABILITIES)
+    assert out.startswith("Ethernet1/35: ")
+    assert "model=N3K-C3548P-XL" in out
+    assert "type_sfp_capable=10Gbase-LR" in out
+    assert "speed=100,1000,10000,auto" in out                   # value commas preserved
+    assert "port_mode=Routed,Switched" in out
+    assert len(out) < len(_CAPABILITIES)
+
+
+def test_interface_capabilities_fails_open_on_stray_line():
+    raw = "Ethernet1/35\n  Model: X\nnot indented, not an interface"
+    assert optimize("show interface ethernet1/35 capabilities", raw) == raw
+

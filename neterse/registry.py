@@ -191,6 +191,39 @@ REGISTRY: List[Entry] = [
         _c._compress_ip_protocols,
         dropped_fields=("empty_sections", "source_neighbor_column_headers"),
     ),
+    # -- Run 821cd8e9 (NX-OS troubleshooting) coverage gaps: hardware /
+    #    inventory / environment / optical families that reached the model
+    #    at full size. Still strictly appended (same tie-break reasoning).
+    _code_entry(
+        r"^show\s+inventory\b",
+        _c._compress_inventory,
+        dropped_fields=(),
+    ),
+    _code_entry(
+        r"^show\s+hardware\s+internal\s+errors\b",
+        _c._compress_hardware_internal_errors,
+        dropped_fields=("box_banners", "all_zero_rows"),
+    ),
+    _code_entry(
+        r"^show\s+environment\b",
+        _c._compress_environment,
+        dropped_fields=(),
+    ),
+    _code_entry(
+        r"^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+transceiver\s+details?\b",
+        _c._compress_transceiver_details,
+        dropped_fields=("dom_alarm_warning_thresholds",),
+    ),
+    _code_entry(
+        r"^show\s+logging\b",
+        _c._compress_syslog,
+        dropped_fields=(),
+    ),
+    _code_entry(
+        r"^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+capabilities\b",
+        _c._compress_interface_capabilities,
+        dropped_fields=(),
+    ),
 ]
 
 

@@ -797,3 +797,301 @@ def _compress_ip_protocols(raw: str) -> str:
     if not any(p.startswith('proto "') for p in out):
         return raw
     return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# show inventory (IOS / NX-OS)
+# ---------------------------------------------------------------------------
+
+_INV_NAME_RE = re.compile(r'^NAME:\s*"(.*?)"\s*,\s*DESCR:\s*"(.*?)"\s*$')
+_INV_PID_RE = re.compile(
+    r"^PID:\s*(.*?)\s*,\s*VID:\s*(.*?)\s*,\s*SN:\s*(.*?)\s*$"
+)
+
+
+def _compress_inventory(raw: str) -> str:
+    """``show inventory`` → one CSV row per component.
+
+    Each entry is a ``NAME: "…", DESCR: "…"`` line followed by a heavily
+    space-padded ``PID: … , VID: … , SN: …`` line; the padding and the
+    two-line split are pure presentation. Fail-open unless at least one
+    complete entry parses.
+    """
+    rows = [["name", "descr", "pid", "vid", "sn"]]
+    pending: Optional[tuple] = None
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        nm = _INV_NAME_RE.match(s)
+        if nm:
+            if pending is not None:          # NAME with no PID line before it
+                return raw
+            pending = nm.groups()
+            continue
+        pm = _INV_PID_RE.match(s)
+        if pm and pending is not None:
+            rows.append([pending[0], pending[1], pm.group(1), pm.group(2), pm.group(3)])
+            pending = None
+            continue
+        return raw                            # unexpected line: fail-open
+    if pending is not None or len(rows) < 2:
+        return raw
+    return "\n".join(_csv_row(r) for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# show hardware internal errors (NX-OS ASIC error counters)
+# ---------------------------------------------------------------------------
+
+_HWERR_CATEGORY_RE = re.compile(r"Device Statistics Category\s*::\s*(\S+)")
+_HWERR_MOD_RE = re.compile(r"\bMod:\s*(\d+)")
+_HWERR_INSTANCE_RE = re.compile(r"^Instance:\s*(\d+)\s*$")
+_HWERR_VALUE_RE = re.compile(r"^[0-9A-Fa-f]{6,}$")
+
+
+def _compress_hardware_internal_errors(raw: str) -> str:
+    """``show hardware internal errors module N`` → nonzero counters, CSV.
+
+    NX-OS prints one banner-boxed section per statistics category (ERROR,
+    QOS, CONGESTION, …); each data row is ``ID Name <16-digit value> port``.
+    The box-drawing banners and dashed rules are dropped, the zero-padded
+    counter is reduced to its significant digits (lossless), and all-zero
+    rows are suppressed with a per-section marker so an empty category
+    stays explicit.
+    """
+    sections: list = []                       # [{"cat","mod","instance","rows","zeros"}]
+    cur: Optional[dict] = None
+    pending_mod: Optional[str] = None
+    saw = False
+
+    for line in raw.splitlines():
+        s = line.strip().strip("|").strip()
+        if not s or set(s) <= {"-", " "}:
+            continue
+        mm = _HWERR_MOD_RE.search(s)
+        if mm and "Device:" in s:
+            pending_mod = mm.group(1)
+            continue
+        cm = _HWERR_CATEGORY_RE.search(s)
+        if cm:
+            cur = {"cat": cm.group(1), "mod": pending_mod,
+                   "instance": None, "rows": [], "zeros": 0}
+            sections.append(cur)
+            saw = True
+            continue
+        im = _HWERR_INSTANCE_RE.match(s)
+        if im:
+            if cur is not None:
+                cur["instance"] = im.group(1)
+            continue
+        toks = s.split()
+        if toks and toks[0] in ("ID", "Last", "Device"):
+            continue                          # column header / residual banner
+        if (
+            cur is not None
+            and len(toks) >= 3
+            and toks[0].isdigit()
+            and _HWERR_VALUE_RE.match(toks[2])
+        ):
+            value = toks[2].lstrip("0")
+            if not value:
+                cur["zeros"] += 1
+                continue
+            ports = " ".join(toks[3:])
+            cur["rows"].append(_csv_row([toks[0], toks[1], value, ports]))
+    if not saw:
+        return raw
+
+    out = ["show hardware internal errors (nonzero counters; padding stripped):"]
+    for sec in sections:
+        head = f"[{sec['cat']}]"
+        if sec["mod"]:
+            head += f" mod={sec['mod']}"
+        if sec["instance"] is not None:
+            head += f" instance={sec['instance']}"
+        if sec["rows"]:
+            if sec["zeros"]:
+                head += f" (+{sec['zeros']} zero rows omitted)"
+            out.append(head)
+            out.append("id,name,value,ports")
+            out.extend(sec["rows"])
+        else:
+            zeros = f" ({sec['zeros']} rows all zero)" if sec["zeros"] else " (none)"
+            out.append(head + zeros)
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# show environment (NX-OS power / fan / temperature)
+# ---------------------------------------------------------------------------
+
+def _compress_environment(raw: str) -> str:
+    """``show environment`` → the same tables without decorative rules or
+    column-alignment padding.
+
+    Every dashed separator line is dropped and each remaining line has its
+    runs of whitespace collapsed to a single space (device fields here are
+    space-free, so no column is corrupted). No data is dropped.
+    """
+    out: list = []
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or set(s) <= {"-", " "}:
+            continue
+        out.append(re.sub(r"\s{2,}", " ", s))
+    if not out:
+        return raw
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# show interface [selector] transceiver details (NX-OS DOM / optical)
+# ---------------------------------------------------------------------------
+
+_XCVR_DETAIL_TITLE_RE = re.compile(r"Detail Diagnostics", re.IGNORECASE)
+_XCVR_METRIC_RE = re.compile(r"^([A-Za-z][A-Za-z ]*?)\s+(-?\d[\d.]*\s+\S+)\b")
+_XCVR_FAULT_RE = re.compile(r"^(.*?)\s*=\s*(\S+)\s*$")
+
+
+def _compress_transceiver_details(raw: str) -> str:
+    """``show interface … transceiver details`` (NX-OS) → per-interface
+    key=value header fields plus only the *current* DOM measurement.
+
+    DECLARED LOSSY: the static per-optic alarm/warning threshold columns
+    (high/low alarm and warning) are dropped — they are fixed properties of
+    the SFP type, not live state — along with the diagnostics title, the
+    column-header rows, the dashed rules and the notation legend. Fail-open
+    unless at least one interface block with fields parses.
+    """
+    blocks: list = []                         # [(iface, [field lines])]
+    current: Optional[list] = None
+    in_dom = False
+    saw_field = False
+
+    def _open(name: str) -> None:
+        nonlocal current, in_dom
+        current = []
+        in_dom = False
+        blocks.append((name, current))
+
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or set(s) <= {"-"}:
+            continue
+        if not line[:1].isspace() and _IFACE_NAME_RE.match(s):
+            _open(s)
+            continue
+        if current is None:
+            return raw
+        if _XCVR_DETAIL_TITLE_RE.search(s):
+            in_dom = True
+            continue
+        if in_dom:
+            if s.startswith("Note:") or s.startswith(("Current", "Measurement", "High", "Low")):
+                continue
+            fault = _XCVR_FAULT_RE.match(s)     # "Transmit Fault Count = 0"
+            if fault:
+                key = re.sub(r"\W+", "_", fault.group(1).strip().lower()).strip("_")
+                current.append(key + "=" + fault.group(2))
+                continue
+            metric = _XCVR_METRIC_RE.match(s)
+            if metric:
+                key = re.sub(r"\W+", "_", metric.group(1).strip().lower()).strip("_")
+                value = re.sub(r"\s+", " ", metric.group(2))
+                current.append(key + "=" + value)
+                saw_field = True
+            continue
+        fm = _TRANSCEIVER_FIELD_RE.match(line)   # "    type is 10Gbase-LR"
+        if fm:
+            key = re.sub(r"\W+", "_", fm.group(1).strip().lower()).strip("_")
+            current.append(key + "=" + fm.group(2).strip())
+            saw_field = True
+            continue
+        # Unrecognized non-blank line inside a block -> fail-open (don't lose it).
+        return raw
+
+    if not blocks or not saw_field:
+        return raw
+    out = ["show interface transceiver details "
+           "(current DOM only; alarm/warning thresholds omitted):"]
+    for name, fields in blocks:
+        if not fields:
+            return raw
+        out.append(f"{name}: " + " ".join(fields))
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# show logging (logfile / last N) — syslog
+# ---------------------------------------------------------------------------
+
+_SYSLOG_LINE_RE = re.compile(
+    r"^(?P<ts>.+?)\s+(?P<host>\S+)\s+(?P<msg>%[\w-]+:.*)$"
+)
+
+
+def _compress_syslog(raw: str) -> str:
+    """``show logging {logfile,last N,…}`` → the same log with the constant
+    device hostname factored out of every message line.
+
+    Every NX-OS/IOS syslog record repeats ``<timestamp> <host>
+    %FACILITY-SEV-MNEMONIC: …``; when a single host owns all of them the
+    hostname is pure redundancy and is stated once in a header instead.
+    Lossless: lines that are not standard facility records (log headers,
+    truncation markers, process messages) pass through untouched, and the
+    compressor fails open unless one host owns every matched record.
+    """
+    lines = raw.splitlines()
+    matched = [(i, m) for i, m in
+               ((i, _SYSLOG_LINE_RE.match(ln)) for i, ln in enumerate(lines)) if m]
+    if len(matched) < 3:
+        return raw
+    hosts = {m.group("host") for _, m in matched}
+    if len(hosts) != 1:
+        return raw
+    host = next(iter(hosts))
+    factored = {i for i, _ in matched}
+    out = [f"host {host}; syslog (host column elided from facility records):"]
+    for i, line in enumerate(lines):
+        if i in factored:
+            m = _SYSLOG_LINE_RE.match(line)
+            out.append(m.group("ts") + " " + m.group("msg"))
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
+# show interface [selector] capabilities (NX-OS)
+# ---------------------------------------------------------------------------
+
+_CAPABILITY_FIELD_RE = re.compile(r"^\s+(.+?):\s+(.*\S)\s*$")
+
+
+def _compress_interface_capabilities(raw: str) -> str:
+    """``show interface … capabilities`` (NX-OS) → one ``key=value`` line per
+    interface, dropping the colon-alignment padding.
+
+    Each interface is a header at column 0 followed by indented
+    ``Field:            value`` rows; only the padding is presentation.
+    Fail-open unless at least one interface with fields parses.
+    """
+    blocks: list = []
+    current: Optional[list] = None
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if not line[:1].isspace() and _IFACE_NAME_RE.match(s):
+            current = []
+            blocks.append((s, current))
+            continue
+        m = _CAPABILITY_FIELD_RE.match(line)
+        if current is None or m is None:
+            return raw
+        key = re.sub(r"\W+", "_", m.group(1).strip().lower()).strip("_")
+        current.append(key + "=" + m.group(2))
+    if not blocks or any(not fields for _, fields in blocks):
+        return raw
+    return "\n".join(f"{name}: " + " ".join(fields) for name, fields in blocks)

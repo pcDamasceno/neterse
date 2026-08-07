@@ -73,6 +73,12 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
         "_compress_ip_route_vrf_summary",
         "_compress_transceiver_inventory",
         "_compress_bgp_all_summary",
+        "_compress_inventory",
+        "_compress_hardware_internal_errors",
+        "_compress_environment",
+        "_compress_transceiver_details",
+        "_compress_syslog",
+        "_compress_interface_capabilities",
     }
     assert all(
         n not in legacy and ("/" in n or n in post_baseline_code)
@@ -81,7 +87,7 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
     spec_names = [n for n in names if n.startswith("spec:")]
     assert len(spec_names) == len(set(spec_names)), "a spec registered twice"
     assert len(spec_names) >= 22
-    assert sum(1 for n in names if not n.startswith("spec:")) == 11
+    assert sum(1 for n in names if not n.startswith("spec:")) == 17
 
 
 # ---------------------------------------------------------------------------
