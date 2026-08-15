@@ -112,6 +112,16 @@ def main(argv=None) -> int:
         if existing.exists():
             raise SystemExit(f"refusing to overwrite {existing}")
 
+    # Read the capture BEFORE writing anything: a typoed --from must fail
+    # with nothing on disk, not leave a half-scaffold the overwrite guard
+    # would then refuse on retry.
+    capture_bytes = None
+    if args.capture:
+        try:
+            capture_bytes = Path(args.capture).read_bytes()
+        except OSError as exc:
+            raise SystemExit(f"--from {args.capture}: {exc}")
+
     command_text = family.replace("_", " ")
     command_re = re.sub(r"\s+", r"\\s+", re.escape(command_text))
     vendor_stem = platform.split("_")[0]
@@ -134,8 +144,8 @@ def main(argv=None) -> int:
     fixture_dir.mkdir(parents=True, exist_ok=True)
     (fixture_dir / "commands.txt").write_text(command_text + "\n")
     raw_path = fixture_dir / "raw.txt"
-    if args.capture:
-        raw_path.write_bytes(Path(args.capture).read_bytes())
+    if capture_bytes is not None:
+        raw_path.write_bytes(capture_bytes)
 
     rel = lambda p: p.relative_to(REPO_ROOT)  # noqa: E731
     print(f"wrote {rel(spec_path)}")

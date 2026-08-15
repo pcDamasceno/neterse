@@ -185,10 +185,12 @@ four places; the full recipe:
    family label to your function's name — that is what lets the
    diagonal/winner/cross-matrix/audit/token gates auto-cover a code
    family (`cisco_ios/show_ip_protocols` is the precedent).
-4. **The count assertion** in `tests/test_engine.py` (it pins how many
-   non-spec entries the registry carries) — bump it, and add targeted
-   behavioral tests in `tests/test_neterse.py` for the stateful edges
-   fixtures can't reach (fail-open on malformed variants, etc.).
+4. **The registry-shape test** in `tests/test_engine.py` — add your
+   function's name to its `post_baseline_code` set and bump the count
+   assertion (it pins how many non-spec entries the registry carries) —
+   and add targeted behavioral tests in `tests/test_neterse.py` for the
+   stateful edges fixtures can't reach (fail-open on malformed
+   variants, etc.).
 
 Out-of-tree/private compressors don't need a PR at all:
 

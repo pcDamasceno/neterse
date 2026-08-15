@@ -83,7 +83,12 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
     assert all(
         n not in legacy and ("/" in n or n in post_baseline_code)
         for n in names[15:]
-    ), "post-baseline entries must follow the legacy sequence"
+    ), (
+        "post-baseline entries must follow the legacy sequence — a NEW "
+        "code compressor also needs its function name added to the "
+        "post_baseline_code set above (see CONTRIBUTING 'When a spec "
+        "genuinely can't express it')"
+    )
     spec_names = [n for n in names if n.startswith("spec:")]
     assert len(spec_names) == len(set(spec_names)), "a spec registered twice"
     assert len(spec_names) >= 22

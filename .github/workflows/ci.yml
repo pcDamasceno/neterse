@@ -61,7 +61,9 @@ jobs:
         id: diffcheck
         run: |
           git add -N .
-          git diff > regenerated.patch
+          # --binary so a control-byte-bearing golden (raw captures are
+          # byte-exact) can't reduce the patch to an unappliable stub.
+          git diff --binary > regenerated.patch
           if [ -s regenerated.patch ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Some committed artifacts need regeneration —" \

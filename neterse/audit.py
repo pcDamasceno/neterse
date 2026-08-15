@@ -308,29 +308,31 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    try:
-        if args.subcommand == "coverage":
-            run_coverage()
-            return 0
-
-        samples = load_samples(args.paths, args.command)
-        if not samples:
-            print("No samples found.")
-            return 0
-        total_red = run_report(samples, show=args.show)
-        if args.fail_under is not None and total_red < args.fail_under:
-            print(f"\nFAIL: total reduction {total_red:.1f}% "
-                  f"< --fail-under {args.fail_under:.1f}%")
-            return 1
-        return 0
-    except BrokenPipeError:
+    if args.subcommand == "coverage":
         # `neterse coverage | head` closing the pipe early is normal use,
-        # not an error. Detach stdout so interpreter shutdown doesn't
-        # print a secondary complaint while flushing.
-        import os
+        # not an error. Scoped to the listing ONLY: the audit path's
+        # --fail-under exists for its exit code, and swallowing EPIPE
+        # there would flip a failing gate to passing.
+        try:
+            run_coverage()
+        except BrokenPipeError:
+            # Detach stdout so interpreter shutdown doesn't print a
+            # secondary complaint while flushing.
+            import os
 
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         return 0
+
+    samples = load_samples(args.paths, args.command)
+    if not samples:
+        print("No samples found.")
+        return 0
+    total_red = run_report(samples, show=args.show)
+    if args.fail_under is not None and total_red < args.fail_under:
+        print(f"\nFAIL: total reduction {total_red:.1f}% "
+              f"< --fail-under {args.fail_under:.1f}%")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
