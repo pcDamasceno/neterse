@@ -30,6 +30,11 @@ Inputs (mix freely; ``-`` = stdin JSONL):
 ``--show N`` prints the head of the N largest gaps so the format can be
 read before a spec is written; ``--fail-under PCT`` makes the exit code
 CI-friendly. Stdlib only, like everything else here.
+
+``neterse coverage`` answers the question BEFORE any capture exists —
+"is show X on vendor Y covered?" — by listing every registry entry
+(spec- and code-tier alike) with its command pattern, platform scope,
+profiles, and declared drops, in canonical order.
 """
 
 from __future__ import annotations
@@ -234,6 +239,32 @@ def run_report(samples: List[Sample], show: int, out=None) -> float:
     return total_red
 
 
+def run_coverage(out=None) -> None:
+    """List every registry entry — the "what's covered?" answer that
+    needs no captures (README's Coverage prose, generated instead of
+    hand-maintained)."""
+    w = (out if out is not None else sys.stdout).write
+
+    entries = iter_entries()
+    specs = sum(1 for e in entries if e.name.startswith("spec:"))
+    w(f"neterse {__version__}: {len(entries)} command families "
+      f"({specs} specs, {len(entries) - specs} code compressors)\n")
+    w(f"{'entry':<46} {'platforms':<28} {'profiles':<10} "
+      "dropped_fields\n")
+    w("-" * WIDTH + "\n")
+    for e in entries:
+        platforms = e.platforms.pattern if e.platforms else "(any)"
+        profiles = ",".join(sorted(e.profiles)) if e.profiles else "-"
+        if e.dropped_fields is None:
+            drops = "(undeclared)"
+        elif not e.dropped_fields:
+            drops = "lossless"
+        else:
+            drops = ", ".join(e.dropped_fields)
+        w(f"{e.name:<46} {platforms:<28} {profiles:<10} {drops}\n")
+        w(f"    command ~ {e.pattern.pattern}\n")
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -270,7 +301,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         "--fail-under", type=float, default=None, metavar="PCT",
         help="exit 1 when the total reduction falls below PCT",
     )
+    sub.add_parser(
+        "coverage",
+        help="list every covered command family (no captures needed): "
+             "entry, command pattern, platform scope, profiles, declared drops",
+    )
     args = parser.parse_args(argv)
+
+    if args.subcommand == "coverage":
+        # `neterse coverage | head` closing the pipe early is normal use,
+        # not an error. Scoped to the listing ONLY: the audit path's
+        # --fail-under exists for its exit code, and swallowing EPIPE
+        # there would flip a failing gate to passing.
+        try:
+            run_coverage()
+        except BrokenPipeError:
+            # Detach stdout so interpreter shutdown doesn't print a
+            # secondary complaint while flushing.
+            import os
+
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 0
 
     samples = load_samples(args.paths, args.command)
     if not samples:

@@ -1,0 +1,54 @@
+name: New command family
+description: >-
+  A show command that reaches your model uncompressed. A real capture is
+  the heart of the contribution — with one attached, the spec is often a
+  ten-line YAML file (CONTRIBUTING.md), and capture-only issues are
+  welcome: someone else can write the spec.
+title: "[family] <platform>: <command>"
+labels: ["new-family"]
+body:
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: >-
+        The platform string your runner uses (netmiko device_type,
+        scrapli/ntc spelling — e.g. cisco_nxos, arista_eos,
+        fortinet_fortios).
+      placeholder: cisco_nxos
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      description: Every spelling agents actually type, if more than one.
+      placeholder: show interface status
+    validations:
+      required: true
+  - type: textarea
+    id: capture
+    attributes:
+      label: Raw capture
+      description: >-
+        One byte-exact real capture (paste inside the code fence —
+        whitespace is data). Scrub hostnames/addresses/serials with
+        SAME-LENGTH replacements so fixed-width offsets survive.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: volume
+    attributes:
+      label: How much of it reaches your model?
+      description: >-
+        `neterse audit run.jsonl` prints chars/call and ranks the gaps —
+        paste your family's line if you have one.
+      placeholder: "1557 chars/call, 3 calls per run"
+  - type: checkboxes
+    id: plan
+    attributes:
+      label: Plan
+      options:
+        - label: I intend to open the PR myself (CONTRIBUTING.md has the flow)
+        - label: Capture only — someone else is welcome to write the spec

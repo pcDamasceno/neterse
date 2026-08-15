@@ -104,3 +104,24 @@ def test_cli_show_dumps_gap_heads(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "OPPORTUNITIES" in out
     assert "head (20 lines" in out
+
+
+def test_cli_coverage_lists_both_tiers(capsys):
+    assert main(["coverage"]) == 0
+    out = capsys.readouterr().out
+    assert "command families" in out
+    # one spec-tier and one code-tier entry, with their metadata columns
+    assert "spec:cisco/show_ip_route" in out
+    assert "_compress_ip_protocols" in out
+    assert "(any)" in out                      # code entries: no platform scope
+    assert "updown" in out                     # a declared profile surfaces
+    assert "lossless" in out                   # () manifests read as lossless
+    assert "command ~ " in out                 # the pattern line per entry
+
+
+def test_cli_coverage_counts_match_the_registry(capsys):
+    from neterse import iter_entries
+
+    assert main(["coverage"]) == 0
+    head = capsys.readouterr().out.splitlines()[0]
+    assert f"{len(iter_entries())} command families" in head

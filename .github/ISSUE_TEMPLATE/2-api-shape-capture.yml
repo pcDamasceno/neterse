@@ -1,0 +1,43 @@
+name: Vendor API shape (controller/MCP payload)
+description: >-
+  A controller or MCP tool response that compacts poorly (Meraki, DNAC,
+  NetBox, Mist, PAN-OS, …). Start with a capture, not with code
+  (decision 40): one scrubbed JSON response dropped in
+  tests/fixtures/api_shapes/<vendor>/ is auto-tested with zero
+  per-vendor code — the capture IS the contribution.
+title: "[api-shape] <vendor>: <endpoint or tool>"
+labels: ["api-shape"]
+body:
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor / controller
+      placeholder: meraki
+    validations:
+      required: true
+  - type: input
+    id: endpoint
+    attributes:
+      label: Endpoint or MCP tool
+      placeholder: GET /organizations/{id}/devices  (or aci_tenants_get)
+    validations:
+      required: true
+  - type: textarea
+    id: capture
+    attributes:
+      label: Response capture
+      description: >-
+        Exactly as your REST client or MCP server returned it,
+        credentials and public addresses scrubbed.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: What the report tool says (optional)
+      description: >-
+        `python scripts/neterse_report.py capture.json` — paste the
+        candidate table; it names the column that made an encoder
+        decline. Skip this if you can't run it.
+      render: text

@@ -1,0 +1,2 @@
+show hardware internal errors module 1
+show hardware internal errors

@@ -183,6 +183,11 @@ def validate(path: Path, data: Any) -> Dict[str, Any]:
     keys = STRATEGY_KEYS[strategy]
     allowed = COMMON_KEYS | keys["required"] | keys["optional"]
     unknown = set(spec) - allowed
+    # A semantic restriction deserves a better message than a typo does:
+    # kv_extract has no header, so there are no columns to project.
+    _require(not (strategy == "kv_extract" and "profiles" in unknown), path,
+             "profiles are not supported for kv_extract — there is no "
+             "header to project (docs/SPECS.md)")
     _require(not unknown, path, f"unknown keys for {strategy}: {sorted(unknown)}")
     missing = keys["required"] - set(spec)
     _require(not missing, path, f"missing required keys: {sorted(missing)}")

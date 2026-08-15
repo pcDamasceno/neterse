@@ -1,0 +1,6 @@
+interface,ip,status,protocol
+Ethernet0/0,172.20.20.12,up,up
+Ethernet0/1,12.12.12.2,up,up
+Ethernet0/2,23.23.23.2,up,up
+Ethernet0/3,unassigned,administratively down,down
+Loopback0,2.2.2.2,up,up

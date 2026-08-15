@@ -1,0 +1,3 @@
+name,descr,pid,vid,sn
+Chassis,Nexus3500 C3548P-XL Chassis,N3K-C3548P-XL,V04,FOC2820R09V
+Fan 1,Nexus3500 C3548P-XL Chassis Fan Module,NXA-FAN-30CFM-F,V00,N/A

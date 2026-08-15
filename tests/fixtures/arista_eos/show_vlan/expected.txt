@@ -1,0 +1,4 @@
+vlan,name,status,ports
+1,default,active,Et3
+10,USERS,active,Et4, Et5
+99,MGMT,active,Cpu, Et6

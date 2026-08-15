@@ -6,6 +6,9 @@ that lands in ``tests/fixtures/``:
 
 * the diagonal genuinely shrinks — with the fixture's platform and on
   the default path alike;
+* the winning rendering is byte-identical to the family's committed
+  golden (``expected.txt`` — the content check that shrink+winner alone
+  cannot give; regenerate with ``scripts/update_goldens.py``);
 * the family's own spec produces the winning candidate (no accidental
   coverage via a false match);
 * a wrong platform can only ever remove the family's candidates, never
@@ -44,6 +47,11 @@ def test_layout_is_well_formed():
         assert f.commands, f"{f.label}: empty commands.txt"
         assert f.body.strip(), f"{f.label}: empty raw.txt"
         assert (FIXTURE_ROOT / f.label / "commands.txt").is_file()
+        assert f.expected is not None, (
+            f"{f.label}: expected.txt missing — every family commits its "
+            "winning rendering as a golden (content correctness, not just "
+            "shrink). Run scripts/update_goldens.py and eyeball the diff."
+        )
 
 
 @pytest.mark.parametrize("fixture,command", DIAGONAL)
@@ -55,7 +63,33 @@ def test_diagonal_shrinks_with_platform_and_without(fixture, command):
             f"(platform={platform!r})"
         )
         best = min(candidates, key=lambda c: len(c.text))
-        assert 0 < len(best.text) < len(fixture.body)
+        assert 0 < len(best.text) < len(fixture.body), (
+            f"{fixture.label}: winner {best.source} did not strictly "
+            f"shrink for {command!r} (platform={platform!r}) — "
+            f"{len(fixture.body)} -> {len(best.text)} chars. A candidate "
+            "must always beat the raw body; check the row regex actually "
+            "matches the capture's rows."
+        )
+
+
+@pytest.mark.parametrize("fixture,command", DIAGONAL)
+def test_diagonal_matches_the_committed_golden(fixture, command):
+    """The winning rendering must be byte-identical to the family's
+    committed ``expected.txt`` — the content check shrink+winner alone
+    cannot give (a regex that swaps or mangles columns still shrinks).
+    Intentional rendering changes are golden regenerations
+    (``scripts/update_goldens.py``) reviewed like any other diff."""
+    if fixture.expected is None:
+        pytest.skip(f"{fixture.label}: no expected.txt committed yet")
+    candidates = render(
+        fixture.body, command=command, platform=fixture.platform
+    )
+    best = min(candidates, key=lambda c: len(c.text))
+    assert best.text == fixture.expected, (
+        f"{fixture.label}: rendering for {command!r} diverged from "
+        "expected.txt — if the change is intentional, regenerate with "
+        "scripts/update_goldens.py and commit the diff"
+    )
 
 
 # Fixture families implemented as CODE compressors (block-shaped output
@@ -64,6 +98,22 @@ def test_diagonal_shrinks_with_platform_and_without(fixture, command):
 # match; these are just named functions instead of vendor specs.
 CODE_FAMILY_WINNERS = {
     "cisco_ios/show_ip_protocols": {"_compress_ip_protocols"},
+    "cisco_nxos/show_environment": {"_compress_environment"},
+    "cisco_nxos/show_hardware_internal_errors": {
+        "_compress_hardware_internal_errors"
+    },
+    "cisco_nxos/show_interface_capabilities": {
+        "_compress_interface_capabilities"
+    },
+    "cisco_nxos/show_interface_transceiver_details": {
+        "_compress_transceiver_details"
+    },
+    "cisco_nxos/show_inventory": {"_compress_inventory"},
+    # cisco_nxos/show_logging (_compress_syslog) is covered by unit tests
+    # only: the curated 10-line sample in test_neterse.py lands under the
+    # audit's 5% opportunity threshold (the host-elision marker eats the
+    # saving at that length). It joins the corpus when a real full-length
+    # `show logging last 200` capture is contributed.
 }
 
 
@@ -109,7 +159,12 @@ def test_cross_matrix_stays_failopen(command):
     for body in ALL_FIXTURE_BODIES + ALL_BODIES + EDGE_INPUTS:
         for c in render(body, command=command):
             assert isinstance(c.text, str)
-            assert 0 < len(c.text) < len(body)
+            assert 0 < len(c.text) < len(body), (
+                f"{c.source}: candidate failed to strictly shrink a "
+                f"foreign body under {command!r} — an entry that matches "
+                "output it cannot parse must fail open (return the input "
+                "unchanged), never emit a non-shrinking rendering"
+            )
 
 
 def test_audit_tool_reads_this_layout():

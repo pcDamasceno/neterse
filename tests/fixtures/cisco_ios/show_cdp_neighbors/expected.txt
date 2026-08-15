@@ -1,0 +1,5 @@
+device,local_intf,holdtime,capability,platform,remote_port
+r3.lab,Eth 0/2,154,R,Linux Uni,Eth 0/1
+r3.lab,Eth 0/0,165,R,Linux Uni,Eth 0/0
+r1.lab,Eth 0/1,128,R,Linux Uni,Eth 0/1
+r1.lab,Eth 0/0,143,R,Linux Uni,Eth 0/0

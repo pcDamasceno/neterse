@@ -1,0 +1,6 @@
+show hardware internal errors (nonzero counters; padding stripped):
+[ERROR] mod=1 instance=0 (+1 zero rows omitted)
+id,name,value,ports
+310,MTC_MB_CRC_ERR_CNT_PORT3,2,4 -
+314,MTC_MB_CRC_ERR_CNT_PORT7,1185,8 -
+[QOS] mod=1 (none)

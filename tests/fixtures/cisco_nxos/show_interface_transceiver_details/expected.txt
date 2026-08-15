@@ -1,0 +1,2 @@
+show interface transceiver details (current DOM only; alarm/warning thresholds omitted):
+Ethernet1/34: transceiver=present type=10Gbase-LR serial_number=ACW26160UE9 temperature=35.17 C rx_power=-5.19 dBm transmit_fault_count=0

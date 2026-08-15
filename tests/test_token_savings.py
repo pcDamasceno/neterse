@@ -38,6 +38,12 @@ def baseline():
     )
     b = load_baseline()
     assert b["encoding"] == ENCODING
+    pinned = b.get("tiktoken_version")
+    assert not pinned or tiktoken.__version__ == pinned, (
+        f"installed tiktoken {tiktoken.__version__} != baseline's pinned "
+        f"{pinned} — version skew moves counts and would misreport as "
+        f"'raw corpus drifted'. Install tiktoken=={pinned} (what CI runs)."
+    )
     return b
 
 

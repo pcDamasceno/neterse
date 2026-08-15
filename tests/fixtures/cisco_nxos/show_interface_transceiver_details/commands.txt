@@ -1,0 +1,2 @@
+show interface ethernet1/34 transceiver details
+show interface e1/34 transceiver details

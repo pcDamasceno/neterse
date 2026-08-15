@@ -1,0 +1,5 @@
+Power Supply:
+PS Model Input Power Current Status
+1 N2200-PAC-400W AC 396.00 33.00 ok
+Fan:
+Fan1(sys_fan1) NXA-FAN-30CFM-F 0.0 front-to-back Ok
