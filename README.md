@@ -281,7 +281,7 @@ distinction and tooling ecosystem) decides per payload.
 | 4 | Contributor scale-out: YAML spec authoring (one `specs/<vendor>/<family>.yaml` per family, compiled — never parsed — at runtime), registry self-append, `neterse[textfsm]` extra driving ntc-templates end-to-end | ✅ |
 | 5 | Runner integration: the universal `compact()` verb (shape dispatch over connections / responses / raw / rows; source adapters for future libraries) + rows-only `render_parsed`/`optimize_parsed` for already-parsed output | ✅ |
 | 6 | Interop format candidates: spec-compliant **TOON** (`[N]{fields}` declarations double as truncation guardrails) and **GCF** generic-profile encoders in the parsed tier — emitted only when the document conforms, chosen only when your policy wants them | ✅ |
-| 7 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ▢ |
+| 7 | Consumers swap vendored copies for the pip dependency; propose a TOON profile for network data upstream | ◐ |
 | 8 | Beyond the CLI: the same candidates contract for MCP tool results (the `neterse-mcp` proxy + `CompactMiddleware`, `neterse[mcp]`), API responses, and generic JSON payloads | ◐ |
 | 9 | Session/delta encoding — render only what changed since the agent's last poll of the same command. Deliberately last: stateful and correctness-sensitive, it needs per-command row-key definitions and extensive testing before it can ship | ▢ |
 
@@ -298,6 +298,7 @@ tier covers anything your parser already handles, on any platform.
 Measure coverage over your own agent's traffic with the bundled CLI:
 
 ```bash
+neterse coverage                      # list every covered family, no captures needed
 neterse audit run.jsonl --show 3      # {"command":..., "platform":..., "raw":...} per line
 neterse audit tests/fixtures          # or point it at a fixture tree
 ```
@@ -310,14 +311,19 @@ specs worth contributing.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: most new command
-families are **one YAML spec file plus two fixture files** —
+families are **one YAML spec file plus three fixture files** —
 `neterse/specs/<platform>/<family>.yaml` (the vendor/command layout
 ntc-templates made familiar) and
-`tests/fixtures/<platform>/<family>/{commands.txt,raw.txt}` — no parser
-code, no registry edit, and the suite auto-covers anything dropped
-there. `python scripts/compile_specs.py` validates the spec loudly and
-regenerates the zero-dependency runtime module. The escape hatch for
-stateful formats is a plain function under the same fail-open contract.
+`tests/fixtures/<platform>/<family>/{commands.txt,raw.txt,expected.txt}`
+(the last is the committed golden rendering,
+`scripts/update_goldens.py` writes it) — no parser code, no registry
+edit, and the suite auto-covers anything dropped there.
+`python scripts/new_spec.py <platform>/<family>` scaffolds the lot with
+consistent names; `python scripts/compile_specs.py` validates the spec
+loudly and regenerates the zero-dependency runtime module;
+[docs/SPECS.md](docs/SPECS.md) documents every field. The escape hatch
+for stateful formats is a plain function under the same fail-open
+contract.
 
 ## License
 

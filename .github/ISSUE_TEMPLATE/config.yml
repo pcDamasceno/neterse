@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contribution guide
+    url: https://github.com/pcDamasceno/neterse/blob/main/CONTRIBUTING.md
+    about: >-
+      Most new command families are one YAML file plus three fixture
+      files — the guide walks the whole flow, docs/SPECS.md documents
+      every spec field.

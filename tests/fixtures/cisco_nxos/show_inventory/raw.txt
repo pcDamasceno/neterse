@@ -1,0 +1,5 @@
+NAME: "Chassis",  DESCR: "Nexus3500 C3548P-XL Chassis"
+PID: N3K-C3548P-XL       ,  VID: V04 ,  SN: FOC2820R09V
+
+NAME: "Fan 1",  DESCR: "Nexus3500 C3548P-XL Chassis Fan Module"
+PID: NXA-FAN-30CFM-F     ,  VID: V00 ,  SN: N/A

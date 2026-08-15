@@ -1,0 +1,1 @@
+show interface ethernet1/35 capabilities

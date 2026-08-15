@@ -1,8 +1,8 @@
 {
   "encoding": "o200k_base",
   "tiktoken_version": "0.13.0",
-  "total_raw_tokens": 6141,
-  "total_neterse_tokens": 3419,
+  "total_raw_tokens": 6740,
+  "total_neterse_tokens": 3733,
   "families": {
     "acl": {
       "raw_tokens": 49,
@@ -63,6 +63,26 @@
     "cisco_ios/show_ip_route": {
       "raw_tokens": 968,
       "neterse_tokens": 441
+    },
+    "cisco_nxos/show_environment": {
+      "raw_tokens": 82,
+      "neterse_tokens": 56
+    },
+    "cisco_nxos/show_hardware_internal_errors": {
+      "raw_tokens": 167,
+      "neterse_tokens": 74
+    },
+    "cisco_nxos/show_interface_capabilities": {
+      "raw_tokens": 66,
+      "neterse_tokens": 49
+    },
+    "cisco_nxos/show_interface_transceiver_details": {
+      "raw_tokens": 178,
+      "neterse_tokens": 61
+    },
+    "cisco_nxos/show_inventory": {
+      "raw_tokens": 106,
+      "neterse_tokens": 74
     },
     "cisco_nxos/show_ip_arp": {
       "raw_tokens": 182,

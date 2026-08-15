@@ -1,0 +1,41 @@
+name: Baseline change / new dependency proposal
+description: >-
+  The two changes CONTRIBUTING.md routes through an issue first: an
+  existing family's OUTPUT should change (a byte-parity/golden/token
+  baseline decision, recorded in docs/DESIGN.md if accepted), or an idea
+  needs a new dependency (the core stays zero-dependency; extras are the
+  only home).
+title: "[proposal] "
+labels: ["proposal"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Output/baseline change (parity, goldens, or token baseline)
+        - New dependency (would live behind an extra)
+        - Other design proposal
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What should change, and where
+      description: >-
+        For output changes: which family, current vs proposed rendering
+        (`scripts/neterse_report.py --show` prints both sides). For
+        dependencies: which extra it would live behind and what it buys.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why
+      description: >-
+        Output changes need evidence the current rendering is unfaithful
+        or wasteful (decisions 20/24/25 are the precedents — live
+        verification beats taste). Invariants 1–5 in docs/DESIGN.md are
+        the bar either way.
+    validations:
+      required: true

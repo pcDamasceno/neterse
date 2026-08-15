@@ -1,0 +1,15 @@
+Ethernet1/34
+    transceiver is present
+    type is 10Gbase-LR
+    serial number is ACW26160UE9
+
+           SFP Detail Diagnostics Information (internal calibration)
+  ----------------------------------------------------------------------------
+                Current              Alarms                  Warnings
+                Measurement     High        Low         High          Low
+  ----------------------------------------------------------------------------
+  Temperature   35.17 C        75.00 C     -5.00 C     70.00 C        0.00 C
+  Rx Power      -5.19 dBm       3.49 dBm  -18.38 dBm    0.49 dBm    -14.40 dBm
+  Transmit Fault Count = 0
+  ----------------------------------------------------------------------------
+  Note: ++  high-alarm; +  high-warning; --  low-alarm; -  low-warning

@@ -67,7 +67,14 @@ CROSS_MATRIX = [
 def test_optimize_byte_parity(command, body):
     if _diverged(command):
         pytest.skip("recorded divergence — pinned by its own golden tests")
-    assert neterse_optimize(command, body) == legacy_snapshot.optimize(command, body)
+    assert neterse_optimize(command, body) == legacy_snapshot.optimize(command, body), (
+        f"byte-parity broke for {command!r}: a (new or changed) entry "
+        "altered a legacy (command, body) result. If your new family's "
+        "command regex claimed this legacy pair, tighten it (negative "
+        "lookaheads — see CONTRIBUTING 'New families never claim legacy "
+        "pairs'). An INTENTIONAL output change is a baseline decision: "
+        "propose it in an issue and record it in docs/DESIGN.md."
+    )
 
 
 @pytest.mark.parametrize("command,body", CROSS_MATRIX)

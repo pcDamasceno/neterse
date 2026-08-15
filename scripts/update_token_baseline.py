@@ -7,8 +7,14 @@ a family's output (docs/DESIGN.md). CI compares against the committed
 file; regenerating to make a red build green without a recorded decision
 defeats the gate.
 
-    pip install tiktoken
+    pip install tiktoken==0.13.0    # the version the committed baseline pins
     python scripts/update_token_baseline.py
+
+A different tiktoken version would rewrite every count in the baseline
+(and the recorded ``tiktoken_version``) — a suspicious PR diff for what
+should be an additive change — so the script refuses a mismatched
+version unless ``--tokenizer-upgrade`` says the bump itself is the
+intended, recorded change.
 """
 from __future__ import annotations
 
@@ -24,7 +30,22 @@ import tiktoken  # noqa: E402
 from tests.token_metrics import BASELINE_PATH, ENCODING, measure  # noqa: E402
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    upgrade = "--tokenizer-upgrade" in (
+        argv if argv is not None else sys.argv[1:]
+    )
+    if BASELINE_PATH.is_file() and not upgrade:
+        pinned = json.loads(BASELINE_PATH.read_text()).get("tiktoken_version")
+        if pinned and tiktoken.__version__ != pinned:
+            print(
+                f"installed tiktoken {tiktoken.__version__} != baseline's "
+                f"pinned {pinned} — regenerating would rewrite every count "
+                f"in the file. Install tiktoken=={pinned} (what CI runs), "
+                "or pass --tokenizer-upgrade if bumping the tokenizer IS "
+                "the intended, recorded change (update the CI pin too).",
+                file=sys.stderr,
+            )
+            return 2
     enc = tiktoken.get_encoding(ENCODING)
     fams = measure(enc)
     tot_raw = sum(m["raw_tokens"] for m in fams.values())

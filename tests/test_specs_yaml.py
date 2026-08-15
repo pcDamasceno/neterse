@@ -203,7 +203,7 @@ def test_rejects_profiles_on_kv_extract():
             "dropped_fields": [],
             "profiles": {"p": {"keep": ["k"]}},
         },
-        "unknown keys",
+        "not supported for kv_extract",
     )
 
 

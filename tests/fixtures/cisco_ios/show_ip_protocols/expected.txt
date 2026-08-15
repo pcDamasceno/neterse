@@ -1,0 +1,4 @@
+*** IP Routing is NSF aware ***
+proto "application": updates_every=0s | invalid=0 holddown=0 flushed=0 | filters=none | max_path=32 | distance=default 4
+proto "ospf 1": filters=none | router_id=22.2.2.2 | areas=1. 1 normal 0 stub 0 nssa | max_path=4 | networks=192.168.23.0 0.0.0.255 area 0 | sources=33.3.3.3 110 00:33:47; 44.4.4.4 110 00:33:36 | distance=default 110
+proto "bgp 200": filters=none | igp_sync=disabled | auto_summary=disabled | neighbors=192.168.12.1; 192.168.23.3; 192.168.34.4 | max_path=1 | sources=192.168.34.4 200 00:13:28; 192.168.12.1 20 00:13:27; 192.168.23.3 200 00:13:28 | distance=external 20 internal 200 local 200

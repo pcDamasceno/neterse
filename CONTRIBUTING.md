@@ -4,7 +4,15 @@ Most contributions are **one YAML file plus fixtures — no parser code,
 no registry edit.** The bar is deliberately low; the CI gates are
 deliberately strict.
 
+Not sure what's already covered? `neterse coverage` lists every command
+family in the registry — spec- and code-tier alike — with its command
+pattern, platform scope, profiles and declared drops.
+
 ## Add a table-shaped command family (the common case)
+
+`python scripts/new_spec.py <platform>/<family>` scaffolds steps 1 and 3
+with the four names consistent by construction and prints the loop
+below; the steps in full:
 
 1. **Write the spec** as `neterse/specs/<platform>/<family>.yaml` — the
    vendor/command layout ntc-templates made familiar. The spec's id IS
@@ -23,11 +31,13 @@ dropped_fields: []            # REQUIRED: the lossiness manifest ([] = lossless)
 
    Quote regexes with **single quotes** (or a `|-` block scalar for
    multi-line `VERBOSE` patterns — see `cisco/show_ip_route.yaml`) so
-   backslashes stay literal; YAML double quotes would reject `\s`. The
-   existing files under `neterse/specs/` are the reference for every
-   field, including `profiles`, `row_flags`, `columns`,
-   `context_prefixes` and the `fixed_width_table` / `kv_extract`
-   strategies.
+   backslashes stay literal; YAML double quotes would reject `\s`.
+   **[docs/SPECS.md](docs/SPECS.md) is the complete field reference** —
+   every key of every strategy (`profiles`, `row_flags`, `columns`,
+   `context_prefixes`, the `fixed_width_table` / `kv_extract`
+   strategies), the naming contract that ties the spec directory, the
+   fixture directory and the `platforms` regex together, and worked
+   examples from the existing files.
 
 2. **Compile it**: run
 
@@ -53,18 +63,43 @@ dropped_fields: []            # REQUIRED: the lossiness manifest ([] = lossless)
    - `raw.txt` — one byte-exact real capture. Never normalize
      whitespace; fixed-width column offsets are data. Capture with
      optimization disabled (or from a snapshot sink) so it is genuinely
-     raw.
+     raw. Scrub anything sensitive (real hostnames, public addresses,
+     serials, SNMP/AAA strings) with **same-length replacements** so the
+     column offsets survive the scrub.
    - `commands.txt` — every command spelling agents actually type for
      it, one per line (abbreviations and per-target variants included).
 
-4. **Run `pytest`.** The suite auto-covers anything in `tests/fixtures/`:
+   The `<platform>` directory name doubles as the platform string the
+   suite passes to `render()`: it must match your spec's `platforms`
+   regex, and your spec's `<vendor>` directory must start with its
+   pre-underscore stem (`cisco_ios` → `cisco…`) — the naming contract,
+   with the failure modes named, is in
+   [docs/SPECS.md](docs/SPECS.md#the-naming-contract).
+
+4. **Eyeball the rendering, then golden it.** Column mangling shrinks
+   just as well as correctness does, so look before you pin:
+
+   ```bash
+   python scripts/neterse_report.py tests/fixtures/<platform>/<family>/raw.txt \
+       --raw --command 'show ...' --platform <platform> --show
+   python scripts/update_goldens.py     # writes expected.txt — commit it
+   ```
+
+   `expected.txt` is the family's golden: the suite byte-compares the
+   winning rendering against it, so review is a text diff instead of a
+   regex audit, and a later engine change can never silently reshape
+   your family's output.
+
+5. **Run `pytest`.** The suite auto-covers anything in `tests/fixtures/`:
    the diagonal asserts your family genuinely shrinks (with and without
-   the platform argument) and that the winner is your spec — not a false
-   match; the cross-matrix asserts it fails open against every other
-   family's output and the edge inputs; the spec tests re-validate every
-   YAML source and reject undeclared manifests. If the token CI job
-   flags a missing baseline entry, run
-   `python scripts/update_token_baseline.py` and commit the diff.
+   the platform argument), matches its golden byte-for-byte, and that
+   the winner is your spec — not a false match; the cross-matrix asserts
+   it fails open against every other family's output and the edge
+   inputs; the spec tests re-validate every YAML source and reject
+   undeclared manifests. If the token CI job flags a missing baseline
+   entry, run `python scripts/update_token_baseline.py` (with
+   `tiktoken==0.13.0` — the version the committed baseline pins; the
+   script refuses a mismatch) and commit the diff.
 
 That's the whole contribution. In the PR description, paste the
 before/after character counts — `neterse audit tests/fixtures` prints them.
@@ -124,12 +159,36 @@ cases rather than leaving you to infer it.
 ## When a spec genuinely can't express it
 
 Formats that carry state across lines (multi-line detail blocks, banner
-delimiters, multi-sub-table output) go in `neterse/_compressors.py` as a
-plain function, registered in **canonical order** in `registry.py` with an
-explicit `dropped_fields` manifest. Look at `_compress_interfaces` (NX-OS
-splits interface state across two lines) for the pattern. If you find
-yourself proposing a new spec key that amounts to "run this little
-program" — it's a code compressor.
+delimiters, multi-sub-table output) are plain-function **code
+compressors** — the honest escape hatch. If you find yourself proposing
+a new spec key that amounts to "run this little program", it's a code
+compressor. Unlike the YAML path, an in-tree code contribution touches
+four places; the full recipe:
+
+1. **The function** in `neterse/_compressors.py`, under the same
+   fail-open contract (return the input unchanged whenever you cannot
+   parse it — the cross-matrix runs your entry against every other
+   family's output). Look at `_compress_interfaces` (NX-OS splits
+   interface state across two lines) for the pattern.
+2. **The registry entry**: a `_code_entry(pattern, fn, dropped_fields)`
+   **appended strictly after** the existing sequence in `registry.py`'s
+   `REGISTRY` list (equal-length ties resolve to earlier entries, so
+   appending can never change an existing result). Scope the command
+   regex tightly — the interface-detail entry's negative lookahead is
+   the cautionary example. Note two in-tree limitations: code entries
+   declare no `platforms` filter (they defend themselves by regex
+   scoping and fail-open parsing alone) and no `profiles`.
+3. **Fixtures, like any family**:
+   `tests/fixtures/<platform>/<family>/{raw.txt,commands.txt}` plus the
+   golden (`scripts/update_goldens.py`), and one entry in
+   `CODE_FAMILY_WINNERS` in `tests/test_fixture_corpus.py` mapping the
+   family label to your function's name — that is what lets the
+   diagonal/winner/cross-matrix/audit/token gates auto-cover a code
+   family (`cisco_ios/show_ip_protocols` is the precedent).
+4. **The count assertion** in `tests/test_engine.py` (it pins how many
+   non-spec entries the registry carries) — bump it, and add targeted
+   behavioral tests in `tests/test_neterse.py` for the stateful edges
+   fixtures can't reach (fail-open on malformed variants, etc.).
 
 Out-of-tree/private compressors don't need a PR at all:
 

@@ -5,7 +5,10 @@ Layout: ``tests/fixtures/<platform>/<family>/`` containing
 * ``raw.txt`` — one byte-exact raw capture (never normalize whitespace:
   fixed-width offsets are data);
 * ``commands.txt`` — every command spelling agents actually type for it,
-  one per line (``#`` comments allowed).
+  one per line (``#`` comments allowed);
+* ``expected.txt`` — the winning rendering of ``raw.txt``, byte-exact
+  (the golden the content test pins; regenerate with
+  ``scripts/update_goldens.py``).
 
 The platform string is the ``<platform>`` directory name, so a fixture
 carries everything ``render()`` needs. The in-module corpus
@@ -18,7 +21,7 @@ The audit CLI reads this same layout directly.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, NamedTuple, Tuple
+from typing import List, NamedTuple, Optional, Tuple
 
 FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures"
 
@@ -28,6 +31,7 @@ class FileFixture(NamedTuple):
     platform: str
     commands: Tuple[str, ...]
     body: str
+    expected: Optional[str]     # golden rendering, None until generated
 
 
 def load_fixtures(root: Path = FIXTURE_ROOT) -> List[FileFixture]:
@@ -39,12 +43,17 @@ def load_fixtures(root: Path = FIXTURE_ROOT) -> List[FileFixture]:
             for line in (family_dir / "commands.txt").read_text().splitlines()
             if line.strip() and not line.strip().startswith("#")
         )
+        expected_path = family_dir / "expected.txt"
         fixtures.append(
             FileFixture(
                 label=f"{family_dir.parent.name}/{family_dir.name}",
                 platform=family_dir.parent.name,
                 commands=commands,
                 body=raw_path.read_text(),
+                expected=(
+                    expected_path.read_text()
+                    if expected_path.is_file() else None
+                ),
             )
         )
     return fixtures

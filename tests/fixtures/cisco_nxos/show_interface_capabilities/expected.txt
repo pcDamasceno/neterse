@@ -1,0 +1,1 @@
+Ethernet1/35: model=N3K-C3548P-XL type_sfp_capable=10Gbase-LR speed=100,1000,10000,auto duplex=full port_mode=Routed,Switched

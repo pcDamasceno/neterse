@@ -1,0 +1,15 @@
+|------------------------------------------------------------------------|
+| Device: L2/L3 forwarding ASIC   Role:MAC                     Mod: 1    |
+| Last cleared @ Sat Apr 26 08:56:22 2025
+| Device Statistics Category :: ERROR
+|------------------------------------------------------------------------|
+Instance:0
+ID          Name                                          Value             Ports
+--          ----                                          -----             -----
+310         MTC_MB_CRC_ERR_CNT_PORT3                      0000000000000002  4 -
+314         MTC_MB_CRC_ERR_CNT_PORT7                      0000000000001185  8 -
+999         ZERO_COUNTER                                  0000000000000000  9 -
+|------------------------------------------------------------------------|
+| Device: L2/L3 forwarding ASIC   Role:MAC                     Mod: 1    |
+| Device Statistics Category :: QOS
+|------------------------------------------------------------------------|

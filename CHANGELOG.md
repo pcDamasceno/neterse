@@ -1,5 +1,55 @@
 # Changelog
 
+## Unreleased
+
+### Contribution flow: goldens, a field reference, and scaffolding
+
+Everything a vendor/family contribution needs now has tooling and a
+document, and the newest code-tier families joined the gates the YAML
+tier already had.
+
+- **Golden fixtures.** Every family in `tests/fixtures/` now commits its
+  winning rendering as `expected.txt`, byte-compared by the suite — the
+  content check shrink+winner alone cannot give (a regex that swaps or
+  mangles columns still shrinks). `scripts/update_goldens.py`
+  regenerates them (`--check` for CI-style drift detection); review of a
+  new family becomes a text diff instead of a regex audit.
+- **`docs/SPECS.md`** — the complete spec-authoring reference: every key
+  of every strategy, the naming contract (fixture directory = platform
+  string = matched by `platforms` = shares the spec directory's vendor
+  stem), profiles, flags, quoting, and worked examples.
+  `tests/test_spec_docs.py` fails when the validator's schema tables and
+  the doc drift apart.
+- **`scripts/new_spec.py <platform>/<family>`** scaffolds the YAML
+  skeleton and fixture directory with the four names consistent by
+  construction, and prints the compile → report → golden → pytest loop.
+- **`neterse coverage`** — new CLI subcommand listing every registry
+  entry (both tiers) with its command pattern, platform scope, profiles
+  and declared drops: "is show X on vendor Y covered?" without needing
+  captures.
+- **Five NX-OS code families joined the fixture corpus** (inventory,
+  hardware internal errors, environment, transceiver details, interface
+  capabilities) via `CODE_FAMILY_WINNERS`, bringing them under the
+  diagonal, golden, cross-matrix, audit and token-baseline gates; the
+  token baseline grows to 46 families (44.6% aggregate, o200k_base).
+  `show logging` stays unit-test-only until a real full-length capture
+  lands — the curated 10-line sample sits under the audit's 5%
+  threshold.
+- **Tokenizer-skew guard.** `scripts/update_token_baseline.py` refuses a
+  tiktoken version other than the one the committed baseline pins
+  (`--tokenizer-upgrade` overrides when the bump is the intended
+  change), and the token suite reports version skew as what it is
+  instead of "raw corpus drifted".
+- **Loud assertion messages** at the exact gates a first contribution
+  trips (parity claimed a legacy pair; a fixture didn't shrink; a
+  candidate failed to fail open), each naming the fix. A `profiles` key
+  on a `kv_extract` spec now gets a semantic error, not a typo-shaped
+  one.
+- **GitHub front door**: issue forms for the three contribution lanes
+  CONTRIBUTING routes through issues, a PR checklist template, GitHub
+  Releases published from this changelog on tag push, and a per-family
+  coverage table in every CI run.
+
 ## 0.5.0 — 2026-08-06
 
 ### MCP tool results — phase 8's first non-CLI surface (decision 38)

@@ -1,0 +1,4 @@
+port,native_vlan,mode,type,enabled,status,reason,speed,description
+1/1/1,1,access,1GbT,yes,up,,1000,uplink-a
+1/1/2,--,routed,1GbT,yes,down,Waiting for link,--,--
+1/1/3,10,access,1GbT,no,down,Administratively down,--,--
