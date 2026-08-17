@@ -267,6 +267,29 @@ def register(
     return decorator
 
 
+def register_spec(spec: Mapping) -> None:
+    """Register an out-of-tree spec dict — the shape
+    ``scripts/compile_specs.py`` emits (decision 44, milestone 1 of the
+    spec-pack story). The declarative tier stops being PR-only: author
+    private YAML in the in-tree layout, compile it with
+    ``compile_specs.py --root my_specs --out my_specs_compiled.py``, and
+    register each compiled dict::
+
+        from my_specs_compiled import SPECS
+        from neterse import register_spec
+        for spec in SPECS:
+            register_spec(spec)
+
+    Appends after everything already registered, like :func:`register` —
+    in-tree entries keep winning ties. Raises at registration time on a
+    malformed spec (unknown strategy, bad projection, missing keys),
+    deliberately: a bad spec should fail your import, not silently never
+    fire. The compile step is where validation lives — feed this what
+    the compiler emitted, not hand-built dicts.
+    """
+    REGISTRY.append(_spec_entry(dict(spec)))
+
+
 def iter_entries() -> Tuple[Entry, ...]:
     """Snapshot of the full registry with metadata."""
     return tuple(REGISTRY)

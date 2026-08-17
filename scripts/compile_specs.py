@@ -449,28 +449,50 @@ def compile_text(root: Path = SPEC_ROOT) -> str:
     return emit_module([spec for _, spec in load_sources(root)])
 
 
+def _shown(path: Path) -> str:
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:               # out-of-tree --root/--out paths
+        return str(path)
+
+
 def main(argv: "List[str] | None" = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--check", action="store_true",
-                        help="verify _compiled.py matches the YAML sources; "
-                             "exit 1 and print a diff on drift")
+                        help="verify the compiled module matches the YAML "
+                             "sources; exit 1 and print a diff on drift")
+    parser.add_argument("--root", type=Path, default=None, metavar="DIR",
+                        help="compile an OUT-OF-TREE spec tree (same "
+                             "<vendor>/<family>.yaml layout) instead of "
+                             "neterse/specs — decision 44; requires --out. "
+                             "Load the result with neterse.register_spec.")
+    parser.add_argument("--out", type=Path, default=None, metavar="FILE",
+                        help="write the compiled module here instead of "
+                             "neterse/specs/_compiled.py (required with "
+                             "--root, so a private tree can never "
+                             "overwrite the in-tree module)")
     args = parser.parse_args(argv)
+    if args.root is not None and args.out is None:
+        parser.error("--root needs --out: an out-of-tree compile must not "
+                     "overwrite the in-tree neterse/specs/_compiled.py")
+    root = args.root if args.root is not None else SPEC_ROOT
+    out = args.out if args.out is not None else COMPILED
 
     try:
-        text = compile_text()
+        text = compile_text(root)
     except SpecError as exc:
         print(f"spec validation failed: {exc}", file=sys.stderr)
         return 2
 
-    current = COMPILED.read_text(encoding="utf-8") if COMPILED.exists() else ""
+    current = out.read_text(encoding="utf-8") if out.exists() else ""
     if args.check:
         if text == current:
-            print(f"{COMPILED.relative_to(REPO_ROOT)} is up to date "
+            print(f"{_shown(out)} is up to date "
                   f"({text.count(chr(10) + '    {')} specs).")
             return 0
         diff = difflib.unified_diff(
             current.splitlines(keepends=True), text.splitlines(keepends=True),
-            fromfile=str(COMPILED.relative_to(REPO_ROOT)),
+            fromfile=_shown(out),
             tofile="regenerated from YAML sources",
         )
         sys.stdout.writelines(diff)
@@ -479,10 +501,10 @@ def main(argv: "List[str] | None" = None) -> int:
         return 1
 
     if text == current:
-        print(f"{COMPILED.relative_to(REPO_ROOT)} already up to date.")
+        print(f"{_shown(out)} already up to date.")
         return 0
-    COMPILED.write_text(text, encoding="utf-8")
-    print(f"wrote {COMPILED.relative_to(REPO_ROOT)}.")
+    out.write_text(text, encoding="utf-8")
+    print(f"wrote {_shown(out)}.")
     return 0
 
 

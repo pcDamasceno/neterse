@@ -209,7 +209,30 @@ four places; the full recipe:
    stateful edges fixtures can't reach (fail-open on malformed
    variants, etc.).
 
-Out-of-tree/private compressors don't need a PR at all:
+## Private specs — no PR needed
+
+The declarative tier is not PR-only (decision 44): captures you can't
+share still get YAML authoring. Keep a private tree in the in-tree
+layout (`<vendor>/<family>.yaml`), compile it with the same validator,
+and register the result at startup:
+
+```bash
+python scripts/compile_specs.py --root ~/net/specs --out ~/net/specs_compiled.py
+```
+
+```python
+from specs_compiled import SPECS       # the module you just generated
+from neterse import register_spec
+
+for spec in SPECS:
+    register_spec(spec)                # appends after the in-tree entries
+```
+
+PyYAML is needed only at your compile step — the runtime you deploy
+stays zero-dependency, exactly like the in-tree flow. Private specs
+that stop being private graduate into a PR unchanged: same file, same
+layout, same validation. Out-of-tree/private code compressors don't
+need a PR either:
 
 ```python
 from neterse import register

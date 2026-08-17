@@ -19,6 +19,7 @@ from neterse import (
     iter_compressors,
     optimize,
     register,
+    register_spec,
     render,
 )
 from neterse import registry
@@ -559,3 +560,31 @@ def test_interface_capabilities_fails_open_on_stray_line():
     raw = "Ethernet1/35\n  Model: X\nnot indented, not an interface"
     assert optimize("show interface ethernet1/35 capabilities", raw) == raw
 
+
+
+def test_register_spec_out_of_tree_roundtrip():
+    """Decision 44: a compiled spec dict registers like an in-tree one —
+    same candidate naming, same platform skip-filter — and a malformed
+    dict fails at registration, not silently at render time."""
+    saved = list(registry.REGISTRY)
+    try:
+        register_spec({
+            "id": "acme_os/show_gadgets",
+            "command": r"show\s+gadgets",
+            "platforms": r"acme",
+            "strategy": "line_regex_table",
+            "row": r"^(\S+)\s+(\d+)$",
+            "header": "gadget,count",
+            "dropped_fields": (),
+        })
+        raw = "widget            3\nsprocket          9\n"
+        out = render(raw, command="show gadgets", platform="acme_os")
+        assert [c.text for c in out] == ["gadget,count\nwidget,3\nsprocket,9"]
+        assert out[0].source == "spec:acme_os/show_gadgets"
+        assert render(raw, command="show gadgets", platform="cisco_ios") == []
+    finally:
+        registry.REGISTRY[:] = saved
+
+    with pytest.raises(KeyError):
+        register_spec({"id": "x/y", "command": "x", "strategy": "nope",
+                       "dropped_fields": ()})

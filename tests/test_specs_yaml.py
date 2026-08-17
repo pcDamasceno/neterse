@@ -321,3 +321,52 @@ def test_auto_append_wires_into_the_real_registry(monkeypatch):
         monkeypatch.undo()
         importlib.reload(registry)
         importlib.reload(neterse)
+
+
+# ---------------------------------------------------------------------------
+# Out-of-tree compile (decision 44: --root/--out + register_spec)
+# ---------------------------------------------------------------------------
+
+def test_cli_root_out_compiles_a_private_tree_end_to_end(tmp_path):
+    """The full decision-44 milestone-1 loop: compile a private tree with
+    --root/--out, exec the emitted module, register_spec each dict, and
+    the family fires through render() like an in-tree spec."""
+    from neterse import register_spec, render
+
+    out = tmp_path / "private_compiled.py"
+    rc = compile_specs.main(["--root", str(_tree(tmp_path)), "--out", str(out)])
+    assert rc == 0 and out.is_file()
+
+    namespace: dict = {}
+    exec(out.read_text(encoding="utf-8"), namespace)
+    specs = namespace["SPECS"]
+    assert [s["id"] for s in specs] == ["acme_os/show_widgets"]
+
+    saved = list(registry.REGISTRY)
+    try:
+        for spec in specs:
+            register_spec(spec)
+        cands = render("gadget            7\nsprocket          12\n", command="show widgets")
+        assert [c.text for c in cands] == ["widget,count\ngadget,7\nsprocket,12"]
+        assert cands[0].source == "spec:acme_os/show_widgets"
+        assert cands[0].dropped_fields == ()
+    finally:
+        registry.REGISTRY[:] = saved
+
+
+def test_cli_root_without_out_is_refused(tmp_path, capsys):
+    """A private tree must never overwrite the in-tree _compiled.py."""
+    with pytest.raises(SystemExit) as exc:
+        compile_specs.main(["--root", str(_tree(tmp_path))])
+    assert exc.value.code == 2
+    assert "--root needs --out" in capsys.readouterr().err
+
+
+def test_cli_check_gates_the_external_out_file(tmp_path):
+    out = tmp_path / "private_compiled.py"
+    root = _tree(tmp_path)
+    assert compile_specs.main(
+        ["--root", str(root), "--out", str(out), "--check"]) == 1  # not yet written
+    assert compile_specs.main(["--root", str(root), "--out", str(out)]) == 0
+    assert compile_specs.main(
+        ["--root", str(root), "--out", str(out), "--check"]) == 0
