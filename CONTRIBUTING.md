@@ -8,6 +8,17 @@ Not sure what's already covered? `neterse coverage` lists every command
 family in the registry — spec- and code-tier alike — with its command
 pattern, platform scope, profiles and declared drops.
 
+## Sign your commits (DCO)
+
+Every commit needs a `Signed-off-by` trailer — `git commit -s` adds it —
+certifying the [Developer Certificate of
+Origin](https://developercertificate.org/) (decision 41; CI enforces it
+on every PR). This matters more here than in most projects: the
+contributions are **captures from real networks**, and your sign-off on
+a commit containing device output or a controller response is the
+recorded assertion that you were permitted to share it (scrubbed as
+described below). The license is Apache-2.0, finally and permanently.
+
 ## Add a table-shaped command family (the common case)
 
 `python scripts/new_spec.py <platform>/<family>` scaffolds steps 1 and 3
