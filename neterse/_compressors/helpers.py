@@ -30,6 +30,26 @@ _IFACE_NAME_RE = re.compile(
 )
 
 
+def _slug(name: str) -> str:
+    """Normalize a device-printed field label to a ``key=value`` key —
+    ``Type (SFP capable)`` → ``type_sfp_capable``. Shared by the
+    block-shaped families (interface capabilities, transceiver inventory
+    and details); a ``block_kv`` strategy formalizing that shape is
+    decision 45's recorded trigger."""
+    return re.sub(r"\W+", "_", name.lower()).strip("_")
+
+
+def _iface_block_header(line: str) -> Optional[str]:
+    """The interface name when *line* opens a per-interface block — a
+    line at column 0 whose first token is interface-shaped — else
+    ``None``. The shared block-splitting test of the block-shaped
+    families (see ``_slug``)."""
+    if line[:1].isspace():
+        return None
+    s = line.strip()
+    return s if _IFACE_NAME_RE.match(s) else None
+
+
 def _csv_row(fields: list) -> str:
     """Join *fields* as one CSV row, quoting only when a field carries a comma
     or quote (device ``Name`` columns hold spaces but rarely commas)."""

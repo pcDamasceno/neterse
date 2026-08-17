@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from typing import Optional
-from .helpers import _IFACE_NAME_RE, _csv_row
+from .helpers import _csv_row, _iface_block_header, _slug
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +110,9 @@ def _compress_transceiver_inventory(raw: str) -> str:
         stripped = line.strip()
         if not stripped:
             continue
-        if not line[:1].isspace() and _IFACE_NAME_RE.match(stripped):
-            current = {"interface": stripped}
+        header = _iface_block_header(line)
+        if header is not None:
+            current = {"interface": header}
             rows.append(current)
             continue
         match = _TRANSCEIVER_FIELD_RE.match(line)
@@ -127,7 +128,7 @@ def _compress_transceiver_inventory(raw: str) -> str:
     if not rows or not field_names or any(len(row) < 2 for row in rows):
         return raw
 
-    normalized = [re.sub(r"\W+", "_", name.lower()).strip("_") for name in field_names]
+    normalized = [_slug(name) for name in field_names]
     if len(set(normalized)) != len(normalized):
         return raw
     out = [_csv_row(["interface"] + normalized)]
@@ -305,8 +306,9 @@ def _compress_transceiver_details(raw: str) -> str:
         s = line.strip()
         if not s or set(s) <= {"-"}:
             continue
-        if not line[:1].isspace() and _IFACE_NAME_RE.match(s):
-            _open(s)
+        header = _iface_block_header(line)
+        if header is not None:
+            _open(header)
             continue
         if current is None:
             return raw
@@ -318,19 +320,19 @@ def _compress_transceiver_details(raw: str) -> str:
                 continue
             fault = _XCVR_FAULT_RE.match(s)     # "Transmit Fault Count = 0"
             if fault:
-                key = re.sub(r"\W+", "_", fault.group(1).strip().lower()).strip("_")
+                key = _slug(fault.group(1))
                 current.append(key + "=" + fault.group(2))
                 continue
             metric = _XCVR_METRIC_RE.match(s)
             if metric:
-                key = re.sub(r"\W+", "_", metric.group(1).strip().lower()).strip("_")
+                key = _slug(metric.group(1))
                 value = re.sub(r"\s+", " ", metric.group(2))
                 current.append(key + "=" + value)
                 saw_field = True
             continue
         fm = _TRANSCEIVER_FIELD_RE.match(line)   # "    type is 10Gbase-LR"
         if fm:
-            key = re.sub(r"\W+", "_", fm.group(1).strip().lower()).strip("_")
+            key = _slug(fm.group(1))
             current.append(key + "=" + fm.group(2).strip())
             saw_field = True
             continue
@@ -369,14 +371,15 @@ def _compress_interface_capabilities(raw: str) -> str:
         s = line.strip()
         if not s:
             continue
-        if not line[:1].isspace() and _IFACE_NAME_RE.match(s):
+        header = _iface_block_header(line)
+        if header is not None:
             current = []
-            blocks.append((s, current))
+            blocks.append((header, current))
             continue
         m = _CAPABILITY_FIELD_RE.match(line)
         if current is None or m is None:
             return raw
-        key = re.sub(r"\W+", "_", m.group(1).strip().lower()).strip("_")
+        key = _slug(m.group(1))
         current.append(key + "=" + m.group(2))
     if not blocks or any(not fields for _, fields in blocks):
         return raw

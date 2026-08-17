@@ -23,6 +23,8 @@ imports are unchanged.
 from __future__ import annotations
 
 from .helpers import (  # noqa: F401
+    _iface_block_header,
+    _slug,
     _IFACE_NAME_RE,
     _csv_row,
     _header_positions,
