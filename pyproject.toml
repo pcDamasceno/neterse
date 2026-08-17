@@ -90,7 +90,7 @@ test = ["neterse[gcf,toon]", "pytest", "PyYAML"]
 # EVERY subpackage must be listed — an omission builds a wheel that
 # imports fine from a source checkout and fails on `pip install`.
 # tests/test_packaging.py enforces this against the tree.
-packages = ["neterse", "neterse.normalizers", "neterse.specs"]
+packages = ["neterse", "neterse._compressors", "neterse.normalizers", "neterse.specs"]
 
 [tool.setuptools.package-data]
 neterse = ["py.typed"]
