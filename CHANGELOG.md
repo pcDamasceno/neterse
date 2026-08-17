@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Governance and the code tier grow up (decisions 41–45)
+
+- **Apache-2.0 is final; commits need DCO sign-off** (`git commit -s`,
+  CI-enforced — decision 41). The sign-off is the provenance trail for
+  capture-bearing contributions; a CLA was weighed and declined.
+- **`_compressors.py` is now a per-vendor package** (decision 42):
+  `helpers`, `shared`, `cisco_ios`, `cisco_nxos`, every name
+  re-exported, function bodies byte-verbatim — layout only, pinned by
+  the parity suite and the goldens. The thrice-duplicated block-family
+  mechanics (label slug, block-header test) became shared helpers.
+- **Code entries take a `platforms` scope** (decision 43) — the same
+  skip-filter specs declare; the six newest NX-OS-era families are
+  scoped, legacy entries stay unscoped pending per-family verification.
+  And a code contribution no longer edits `registry.py`: vendor modules
+  declare `CODE_FAMILIES` rows that self-append, the code-tier analogue
+  of the spec tier's decision 28.
+- **Out-of-tree YAML specs** (decision 44): compile a private tree with
+  `scripts/compile_specs.py --root DIR --out FILE` and load it with the
+  new public `neterse.register_spec(dict)` — the declarative tier stops
+  being PR-only, and the deployed runtime stays zero-dependency.
+  Entry-point spec packs and a `spec_format` version stamp are the
+  recorded next milestones.
+- **Recorded triggers instead of open questions** (decision 45): a
+  `block_kv` strategy reopens when the first contributor block-shaped
+  family arrives; registry scaling is revisited at ~100 specs.
+
 ### Contribution flow: goldens, a field reference, and scaffolding
 
 Everything a vendor/family contribution needs now has tooling and a
