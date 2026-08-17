@@ -384,3 +384,19 @@ def _compress_interface_capabilities(raw: str) -> str:
     if not blocks or any(not fields for _, fields in blocks):
         return raw
     return "\n".join(f"{name}: " + " ".join(fields) for name, fields in blocks)
+
+
+# Families registered via the decision-43 self-append (see shared.py for
+# the row shape): NX-OS-shaped formats, scoped so a caller who names any
+# other platform skips them outright.
+CODE_FAMILIES = [
+    (r"^show\s+hardware\s+internal\s+errors\b",
+     _compress_hardware_internal_errors,
+     ("box_banners", "all_zero_rows"), r"nx"),
+    (r"^show\s+environment\b", _compress_environment, (), r"nx"),
+    (r"^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+transceiver\s+details?\b",
+     _compress_transceiver_details,
+     ("dom_alarm_warning_thresholds",), r"nx"),
+    (r"^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+capabilities\b",
+     _compress_interface_capabilities, (), r"nx"),
+]

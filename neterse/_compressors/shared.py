@@ -253,3 +253,15 @@ def _compress_syslog(raw: str) -> str:
         else:
             out.append(line)
     return "\n".join(out)
+
+
+# Families registered via the decision-43 self-append — the code-tier
+# analogue of decision 28: (command pattern, function, dropped_fields
+# manifest, platforms skip-scope). Declaration order is registration
+# order, strictly after the canonical sequence and the auto-appended
+# specs (registry.py). Scopes declared broadly (decision 5): the filter
+# kills cross-vendor false matches, nothing more.
+CODE_FAMILIES = [
+    (r"^show\s+inventory\b", _compress_inventory, (), r"ios|xe|xr|nx"),
+    (r"^show\s+logging\b", _compress_syslog, (), r"ios|xe|xr|nx"),
+]

@@ -176,19 +176,25 @@ a new spec key that amounts to "run this little program", it's a code
 compressor. Unlike the YAML path, an in-tree code contribution touches
 four places; the full recipe:
 
-1. **The function** in `neterse/_compressors.py`, under the same
-   fail-open contract (return the input unchanged whenever you cannot
-   parse it — the cross-matrix runs your entry against every other
-   family's output). Look at `_compress_interfaces` (NX-OS splits
-   interface state across two lines) for the pattern.
-2. **The registry entry**: a `_code_entry(pattern, fn, dropped_fields)`
-   **appended strictly after** the existing sequence in `registry.py`'s
-   `REGISTRY` list (equal-length ties resolve to earlier entries, so
-   appending can never change an existing result). Scope the command
-   regex tightly — the interface-detail entry's negative lookahead is
-   the cautionary example. Note two in-tree limitations: code entries
-   declare no `platforms` filter (they defend themselves by regex
-   scoping and fail-open parsing alone) and no `profiles`.
+1. **The function** in the matching vendor module of
+   `neterse/_compressors/` (`cisco_ios.py`, `cisco_nxos.py`, or
+   `shared.py` for formats spanning platforms; a new vendor gets a new
+   module re-exported from `__init__.py`), under the same fail-open
+   contract (return the input unchanged whenever you cannot parse it —
+   the cross-matrix runs your entry against every other family's
+   output). Look at `_compress_interfaces` (NX-OS splits interface
+   state across two lines) for the pattern.
+2. **The `CODE_FAMILIES` row** — no `registry.py` edit (decision 43,
+   the code-tier analogue of decision 28): add
+   `(pattern, fn, dropped_fields, platforms)` to your vendor module's
+   `CODE_FAMILIES` list at the bottom of the file. Rows self-append
+   after the canonical sequence in declaration order, so appending can
+   never change an existing result. Scope the command regex tightly —
+   the interface-detail entry's negative lookahead in `registry.py` is
+   the cautionary example — and declare `platforms` broadly, exactly
+   like a spec would (it is the same skip-filter; `r"nx"` for an
+   NX-OS-only format). One in-tree limitation remains: code entries
+   don't declare `profiles`.
 3. **Fixtures, like any family**:
    `tests/fixtures/<platform>/<family>/{raw.txt,commands.txt}` plus the
    golden (`scripts/update_goldens.py`), and one entry in

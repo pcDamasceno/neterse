@@ -86,12 +86,17 @@ def _code_entry(
     pattern: str,
     fn: Compressor,
     dropped_fields: Optional[Tuple[str, ...]] = None,
+    platforms: Optional[str] = None,
 ) -> Entry:
+    # platforms is the same skip-filter specs declare (decision 5): it can
+    # only remove false-match surface, never force a match — the
+    # no-platform byte-parity path is untouched. Legacy code entries stay
+    # unscoped (decision 43); vendor-specific ones declare their scope.
     return Entry(
         pattern=re.compile(pattern, re.IGNORECASE),
         fn=fn,
         name=getattr(fn, "__name__", str(fn)),
-        platforms=None,           # code compressors are always tried (fail-open)
+        platforms=re.compile(platforms, re.IGNORECASE) if platforms else None,
         dropped_fields=dropped_fields,
     )
 
@@ -191,39 +196,6 @@ REGISTRY: List[Entry] = [
         _c._compress_ip_protocols,
         dropped_fields=("empty_sections", "source_neighbor_column_headers"),
     ),
-    # -- Run 821cd8e9 (NX-OS troubleshooting) coverage gaps: hardware /
-    #    inventory / environment / optical families that reached the model
-    #    at full size. Still strictly appended (same tie-break reasoning).
-    _code_entry(
-        r"^show\s+inventory\b",
-        _c._compress_inventory,
-        dropped_fields=(),
-    ),
-    _code_entry(
-        r"^show\s+hardware\s+internal\s+errors\b",
-        _c._compress_hardware_internal_errors,
-        dropped_fields=("box_banners", "all_zero_rows"),
-    ),
-    _code_entry(
-        r"^show\s+environment\b",
-        _c._compress_environment,
-        dropped_fields=(),
-    ),
-    _code_entry(
-        r"^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+transceiver\s+details?\b",
-        _c._compress_transceiver_details,
-        dropped_fields=("dom_alarm_warning_thresholds",),
-    ),
-    _code_entry(
-        r"^show\s+logging\b",
-        _c._compress_syslog,
-        dropped_fields=(),
-    ),
-    _code_entry(
-        r"^show\s+int(?:erface|erfaces)?(?:\s+.+?)?\s+capabilities\b",
-        _c._compress_interface_capabilities,
-        dropped_fields=(),
-    ),
 ]
 
 
@@ -240,6 +212,21 @@ def _auto_appended(specs: list, ordered_ids: set) -> List[Entry]:
         if spec["id"] not in ordered_ids
     ]
 
+
+# Code families with no explicit position above self-append here — the
+# code-tier analogue of decision 28 (decision 43): each vendor module of
+# ``_compressors`` declares a CODE_FAMILIES list of
+# (pattern, fn, dropped_fields, platforms) rows, appended strictly AFTER
+# the canonical sequence, BEFORE the auto-appended specs (in-tree code
+# families predate whatever spec a contributor adds later, and decision
+# 28's contract — an unlisted spec lands strictly last — stays intact).
+# Module order below is fixed and declaration order within a module is
+# preserved, so registration stays deterministic without an edit to this
+# file; ties still resolve to every earlier entry. Pin a code entry in
+# the explicit list above only when its position genuinely matters.
+for _module in (_c.shared, _c.cisco_ios, _c.cisco_nxos):
+    for _pattern, _fn, _drops, _platforms in getattr(_module, "CODE_FAMILIES", ()):
+        REGISTRY.append(_code_entry(_pattern, _fn, _drops, _platforms))
 
 _EXPLICITLY_ORDERED = {
     e.name[len("spec:"):] for e in REGISTRY if e.name.startswith("spec:")
