@@ -95,6 +95,45 @@ def test_registry_interleaves_specs_and_code_in_canonical_order():
     assert sum(1 for n in names if not n.startswith("spec:")) == 17
 
 
+def test_code_families_self_append_with_platform_scopes():
+    """Decision 43: CODE_FAMILIES rows register without a registry.py
+    edit, strictly after the canonical sequence and BEFORE auto-appended
+    specs (decision 28's unlisted-spec-lands-last contract holds), each
+    carrying its declared platform skip-scope and manifest."""
+    from neterse._compressors import cisco_ios, cisco_nxos, shared
+
+    names = [e.name for e in iter_entries()]
+    entries = {e.name: e for e in iter_entries()}
+    declared = [
+        row
+        for module in (shared, cisco_ios, cisco_nxos)
+        for row in getattr(module, "CODE_FAMILIES", ())
+    ]
+    assert declared, "the self-append mechanism should have users"
+    canonical_len = len(names) - len(declared)
+    assert names[canonical_len:] == [fn.__name__ for _, fn, _, _ in declared], (
+        "CODE_FAMILIES must append after the canonical sequence in "
+        "module-then-declaration order"
+    )
+    for pattern, fn, drops, platforms in declared:
+        e = entries[fn.__name__]
+        assert e.pattern.pattern == pattern
+        assert e.dropped_fields == tuple(drops)
+        assert e.platforms is not None, f"{e.name}: scope lost"
+        assert e.platforms.pattern == platforms
+
+
+def test_scoped_code_family_skips_on_wrong_platform():
+    """The platforms scope on a code entry is the same skip-filter specs
+    get (decision 5): a wrong platform removes the candidate, no platform
+    tries everything — the byte-parity path is untouched."""
+    body = "Ethernet1/35\n  Model:                 N3K-C3548P-XL\n"
+    cmd = "show interface ethernet1/35 capabilities"
+    assert render(body, command=cmd, platform="cisco_nxos"), "own platform skipped"
+    assert render(body, command=cmd, platform="juniper_junos") == []
+    assert optimize(cmd, body) != body, "no-platform path must still try it"
+
+
 # ---------------------------------------------------------------------------
 # Platform keying
 # ---------------------------------------------------------------------------
@@ -115,9 +154,10 @@ def test_platform_never_forces_and_none_means_try_everything():
         assert render(body, command=command, platform=None) == default
 
 
-def test_code_entries_ignore_platform_filter():
-    """Code compressors declare no platform scope and must always run —
-    the filter can only skip scoped entries, never scope-less ones."""
+def test_unscoped_code_entries_ignore_platform_filter():
+    """Legacy code compressors declare no platform scope and must always
+    run — the filter can only skip entries that DECLARE a scope (specs,
+    and decision-43 CODE_FAMILIES rows), never scope-less ones."""
     out = render(ACL, command="show ip access-lists", platform="junos")
     assert out and out[0].source == "_compress_acl"
 

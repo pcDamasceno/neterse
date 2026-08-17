@@ -86,6 +86,7 @@ from .registry import (  # noqa: F401  (re-exported)
     iter_compressors,
     iter_entries,
     register,
+    register_spec,
 )
 
 __version__ = "0.5.0"
@@ -99,6 +100,7 @@ __all__ = [
     "optimize",
     "optimize_parsed",
     "register",
+    "register_spec",
     "render",
     "render_parsed",
     "__version__",

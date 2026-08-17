@@ -14,6 +14,9 @@
 
 ## Checklist
 
+- [ ] Every commit is signed off (`git commit -s` — DCO, see
+      CONTRIBUTING "Sign your commits"; for capture-bearing commits this
+      asserts you may share the scrubbed output)
 - [ ] Spec YAML **and** the regenerated `neterse/specs/_compiled.py`
       committed together (`python scripts/compile_specs.py`)
 - [ ] Fixtures under `tests/fixtures/<platform>/<family>/`:

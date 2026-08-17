@@ -37,6 +37,29 @@ jobs:
       - name: Coverage table (the numbers CONTRIBUTING asks PRs to paste)
         run: python -m neterse audit tests/fixtures --fail-under 20
 
+  # Every PR commit certifies the Developer Certificate of Origin
+  # (decision 41): captures from real networks need a provenance trail.
+  dco:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Signed-off-by on every commit (git commit -s)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          missing=0
+          for sha in $(git rev-list "origin/$BASE_REF..HEAD" --no-merges); do
+            if ! git log -1 --format=%B "$sha" | grep -qiE '^Signed-off-by: .+<.+>'; then
+              echo "::error::commit $sha lacks a Signed-off-by trailer — amend with 'git commit -s' (see CONTRIBUTING 'Sign your commits')"
+              missing=1
+            fi
+          done
+          exit $missing
+
   # Convenience for contributors without a working local setup: regenerate
   # every committed artifact and, when the PR forgot one, upload the diff
   # as a patch to download-and-commit. Never fails — the drift gates in
