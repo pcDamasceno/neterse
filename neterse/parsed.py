@@ -52,9 +52,10 @@ returned — candidates, not policy:
     header, pipe-delimited rows, ``-`` for null vs ``~`` for
     field-absent, JSON-grammar quoting, nested-uniform dict columns
     flattened into quoted ``parent>child`` path columns). Slightly
-    larger than CSV on flat tables, but it distinguishes null from
-    missing — which CSV's empty cell conflates — and interoperates with
-    the GCF tooling ecosystem (MCP proxies, decoders in six languages).
+    larger than CSV on flat tables, but it distinguishes a missing key
+    from an empty string — which CSV's empty cell conflates — and
+    interoperates with the GCF tooling ecosystem (MCP proxies, decoders
+    in six languages).
     Emitted only when every cell is representable in a conforming
     generic-profile table (no array cells, no non-uniform nesting) and
     no profile projection applied, for the same reason as
@@ -74,8 +75,9 @@ SD-WAN / Meraki styles) are turned into canonical rows by
 stays vendor-agnostic: it encodes rows, it does not know who produced them.
 
 Faithfulness: the default profile projects nothing — every key of every
-row appears (missing keys and JSON ``null`` both render as an empty
-cell). Named profiles (:data:`PROFILES`) are declared-lossy field
+row appears. JSON ``null`` renders as the bare literal ``null`` and the
+string ``"null"`` is quoted, so null never reads as an empty string
+(decision 46); a key missing from a row renders as an empty cell. Named profiles (:data:`PROFILES`) are declared-lossy field
 projections keyed on field-NAME patterns, because parser schemas differ
 per ecosystem; a profile that matches no fields (or all of them) falls
 back to the complete encoding rather than guess. Applied projections
@@ -154,22 +156,39 @@ def _columns(items: List[dict]) -> List[str]:
     return cols
 
 
+# Sentinel for a key absent from a row: GCF writes it ``~`` (distinct from
+# null's ``-``), the CSV cell leaves it empty (distinct from null's ``null``).
+_ABSENT = object()
+
+
 def _cell(value: Any) -> str:
-    if value is None:
+    """One finished CSV cell, quoted where needed.
+
+    Quoting is decided here, while the value's type is still known: JSON
+    null is a value of its own, not an empty string, so an API that says
+    "no tenant" (null) and one that says "tenant named ''" must not render
+    alike (decision 46). null is the bare literal ``null``; the STRING
+    ``"null"`` is quoted so it cannot pass for one. A key ABSENT from a
+    row stays an empty cell — callers pass the ``_ABSENT`` sentinel for
+    it, never None.
+    """
+    if value is _ABSENT:
         return ""
-    if isinstance(value, str):
-        return value
+    if value is None:
+        return "null"
     if value is True:
         return "true"
     if value is False:
         return "false"
+    if isinstance(value, str):
+        return _quote(value)
     if isinstance(value, (dict, list, tuple)):
-        return json.dumps(value, separators=(",", ":"), default=str)
-    return str(value)
+        return _quote(json.dumps(value, separators=(",", ":"), default=str))
+    return _quote(str(value))
 
 
 def _quote(s: str) -> str:
-    if "," in s or '"' in s or "\n" in s:
+    if "," in s or '"' in s or "\n" in s or s == "null":
         return '"' + s.replace('"', '""') + '"'
     return s
 
@@ -177,7 +196,7 @@ def _quote(s: str) -> str:
 def _csv_block(items: List[dict], kept: List[str]) -> List[str]:
     """Header-once CSV lines for *items* over the *kept* columns."""
     return [",".join(_quote(c) for c in kept)] + [
-        ",".join(_quote(_cell(row.get(c))) for c in kept) for row in items
+        ",".join(_cell(row.get(c, _ABSENT)) for c in kept) for row in items
     ]
 
 
@@ -202,12 +221,12 @@ def _fold_constants(
     pairs: List[str] = []
     varying: List[str] = []
     for column in kept:
-        cells = [_cell(row.get(column)) for row in items]
+        cells = [_cell(row.get(column, _ABSENT)) for row in items]
         first = cells[0]
         if any(cell != first for cell in cells[1:]):
             varying.append(column)
             continue
-        quoted = _quote(first)
+        quoted = first
         pair = _quote(column) + "=" + quoted
         if len(items) * (len(quoted) + 1) > len(pair) + 1:
             pairs.append(pair)
@@ -242,8 +261,6 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _TOON_UNSAFE = re.compile(r'[:"\\\[\]{}]')
 _EXPONENT_FORM = re.compile(r"^(-?[0-9.]+)[eE]([+-]?)0*(\d+)$")
 
-# Sentinel for a key absent from a row (GCF distinguishes it from null).
-_ABSENT = object()
 
 
 def _escaped(s: str) -> str:
@@ -596,7 +613,7 @@ def _table_lines(
             kept = varying
     lines = prefix + [",".join(_quote(c) for c in kept)]
     for flat, nested in zip(flats, nested_per_row):
-        lines.append(",".join(_quote(_cell(flat.get(c))) for c in kept))
+        lines.append(",".join(_cell(flat.get(c, _ABSENT)) for c in kept))
         for key, subrows in nested:
             sub_lines, sub_dropped = _table_lines(subrows, profile)
             lines.append("  " + _section_label(key) + ":")
@@ -628,7 +645,9 @@ def _section_lines(
         table_items: Optional[List[dict]] = None
         if isinstance(value, (list, tuple)):
             table_items = _rows(value)
-        elif isinstance(value, dict):
+        elif isinstance(value, (dict, str)):
+            # A string is offered too: a server may have pre-encoded its
+            # rows as TOON text inside the field (decision 48).
             table_items = normalizers.normalize(value)
         if table_items:
             table, dropped = _table_lines(table_items, profile)
@@ -654,6 +673,17 @@ def _section_lines(
     return lines, dropped_fields
 
 
+def _nests_rows(rows: List[dict]) -> bool:
+    """True when any cell of *rows* is itself a row-collection a
+    normalizer claims — the cells :func:`_table_lines` tabulates."""
+    return any(
+        isinstance(value, (list, tuple, dict))
+        and normalizers.normalize(value) is not None
+        for row in rows
+        for value in row.values()
+    )
+
+
 def _encode_sections(parsed: Any, profile: str) -> Optional[Encoded]:
     """Encode a mixed mapping as named scalar and tabular sections.
 
@@ -663,13 +693,26 @@ def _encode_sections(parsed: Any, profile: str) -> Optional[Encoded]:
     Row-collections nested INSIDE a row (an ACI ``_children``/``_faults``
     subtree) are tabulated recursively rather than JSON-blobbed, via
     :func:`_table_lines`.
+
+    A mapping a normalizer claims as rows is the flat encoders' business —
+    unless those rows carry nested row-collections, which the flat
+    encoders can only JSON-blob into one cell. A GraphQL response
+    (``{"NetboxDevice": {"count": 5, "edges": [...]}}``) is exactly that:
+    ``keyed_dict`` reads it as one row whose ``edges`` cell holds the whole
+    result. Then this encoder competes too (decision 47).
     """
     if (
         not isinstance(parsed, dict)
         or not parsed
-        or normalizers.normalize(parsed) is not None
-        or not any(isinstance(value, (dict, list, tuple)) for value in parsed.values())
+        or not any(
+            isinstance(value, (dict, list, tuple))
+            or (isinstance(value, str) and normalizers.normalize(value) is not None)
+            for value in parsed.values()
+        )
     ):
+        return None
+    claimed = normalizers.normalize(parsed)
+    if claimed is not None and not _nests_rows(claimed):
         return None
     sectioned = _section_lines(parsed, profile)
     if sectioned is None:

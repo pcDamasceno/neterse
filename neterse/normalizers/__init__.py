@@ -27,7 +27,13 @@ win without editing this file. Built-ins ship one module per style:
 * :mod:`neterse.normalizers._generic` — vendor-neutral shapes every
   ecosystem uses (the ``{name: {...}}`` keyed-dict NAPALM/OpenConfig
   return).
+* :mod:`neterse.normalizers._toon` — TOON text a server pre-encoded into
+  a JSON string field (infrahub-mcp's ``get_nodes``). The one built-in
+  that claims a STRING: the sections encoder offers string values to
+  :func:`normalize` too (decision 48).
 * :mod:`neterse.normalizers.cisco_aci` — the ACI ``imdata`` object style.
+* :mod:`neterse.normalizers.infrahub` — Infrahub GraphQL ``edges`` lists
+  with ``{value}``/``{node}`` field envelopes.
 
 Contributing a vendor is one file plus one line in ``NORMALIZERS`` below
 (see ``CONTRIBUTING.md``). Stdlib only, fail-open — like everything else.
@@ -37,15 +43,19 @@ from __future__ import annotations
 from typing import Any, Callable, List, Optional
 
 from ._generic import keyed_dict
+from ._toon import toon_text
 from .cisco_aci import class_attributes
+from .infrahub import graphql_edges
 
 __all__ = [
     "Normalizer",
     "class_attributes",
+    "graphql_edges",
     "iter_normalizers",
     "keyed_dict",
     "normalize",
     "register_normalizer",
+    "toon_text",
 ]
 
 # A normalizer receives an arbitrary decoded structure and returns the
@@ -59,7 +69,9 @@ Normalizer = Callable[[Any], Optional[List[dict]]]
 # importing its normalizer above and listing it here.
 NORMALIZERS: List[Normalizer] = [
     class_attributes,   # cisco_aci: {class: {attributes: {...}}}
+    graphql_edges,      # infrahub:  [{node: {field: {value: ...}}}]
     keyed_dict,         # generic:  {name: {...}}
+    toon_text,          # generic:  "[N]:\n  - key: value" (strings only)
 ]
 
 

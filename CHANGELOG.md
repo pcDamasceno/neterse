@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Infrahub through the MCP proxy (decisions 46–48)
+
+Tested against a live Infrahub instance through infrahub-mcp. Before
+these changes the proxy saved 0% of o200k tokens on a GraphQL device
+query and 10% on `get_nodes`; it now saves 60% and 54% on the committed
+captures in `tests/fixtures/api_shapes/infrahub/`.
+
+- **null is no longer an empty cell** (decision 46). CSV cells and fold
+  markers write JSON null as `null`; the string `"null"` is quoted; a key
+  missing from a row is still an empty cell. CLI families are unchanged:
+  no pinned golden and no token-baseline entry moved.
+- **Infrahub GraphQL responses** (decision 47). The new
+  `neterse.normalizers.graphql_edges` turns a list of `{"node": {...}}`
+  edges into rows and removes the `{"value": X}` and `{"node": {...}}`
+  field wrappers. A nested connection (a device's interfaces) renders as
+  an indented sub-table under its row. `parsed:sections` now also
+  competes when a normalizer claims a mapping whose rows hold nested row
+  lists, which is how a GraphQL response reaches the sections encoder.
+- **TOON text inside a JSON string field** (decision 48). The new
+  `neterse.normalizers.toon_text` reads the list and tabular root-array
+  forms the `toonify` encoder writes, so infrahub-mcp's
+  `{"nodes": "<TOON text>", ...}` results fold and tabulate like any
+  other rows. It is the first normalizer that accepts a string; the
+  sections encoder now offers string fields to `normalize()`.
+
 ### Governance and the code tier grow up (decisions 41–45)
 
 - **Apache-2.0 is final; commits need DCO sign-off** (`git commit -s`,

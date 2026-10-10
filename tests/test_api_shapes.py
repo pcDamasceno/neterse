@@ -23,6 +23,7 @@ a normalizer (see CONTRIBUTING.md).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -37,15 +38,29 @@ CAPTURES = sorted(FIXTURES.glob("*/*.json"))
 IDENTITY_KEYS = {"name", "dn", "host-name", "hostname", "system-ip", "uuid"}
 
 
+#: ``name: value`` lines inside a string field — rows a server pre-encoded
+#: as TOON/YAML-like text (infrahub-mcp's ``get_nodes``). Read here by a
+#: regex, independently of the decoder under test. Quoted values are
+#: skipped: their rendering is the decoded string, not the quoted token.
+_EMBEDDED_IDENTITY = re.compile(
+    r"^[ \t]*(?:- )?(%s): ([^\s\"].*)$" % "|".join(sorted(map(re.escape, IDENTITY_KEYS))),
+    re.MULTILINE,
+)
+
+
 def _identity_values(node, out: set) -> None:
     if isinstance(node, dict):
         for key, value in node.items():
+            if key in IDENTITY_KEYS and isinstance(value, dict) and set(value) == {"value"}:
+                value = value["value"]          # an attribute envelope (Infrahub GraphQL)
             if key in IDENTITY_KEYS and isinstance(value, str) and value:
                 out.add(value)
             _identity_values(value, out)
     elif isinstance(node, list):
         for value in node:
             _identity_values(value, out)
+    elif isinstance(node, str) and "\n" in node:
+        out.update(match.group(2) for match in _EMBEDDED_IDENTITY.finditer(node))
 
 
 def _ids(name: str) -> str:

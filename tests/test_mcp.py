@@ -10,10 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
 from neterse.mcp import compact_result, compact_text
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 # The shape the aci verification target returns: an APIC envelope whose
 # imdata list the cisco_aci normalizer claims.
@@ -56,6 +59,19 @@ def test_rows_survive_in_the_compacted_form():
     out = compact_text(PRETTY)
     for name in ("common", "mgmt", "infra"):
         assert f"uni/tn-{name}" in out
+
+
+def test_toon_rows_inside_a_json_field_are_read_and_folded():
+    """infrahub-mcp's get_nodes answers {"nodes": "<TOON text>", ...}; the
+    seam must reach the rows inside the string (decision 48), keep every
+    device name, and keep null apart from the empty string (decision 46)."""
+    wire = (FIXTURES / "api_shapes" / "infrahub" / "get_nodes_devices.json").read_text()
+    out = compact_text(wire)
+    assert len(out) < len(wire) * 0.5
+    for name in ("CE-CUSTC-01", "CE-CUSTC-02", "CORE-RR-01", "PE-EMEA-01", "PE-EMEA-02"):
+        assert name in out
+    assert "tenant=null" in out
+    assert out.endswith("count:5\ntotal_count:5\nhas_more:false\noffset:0\nlimit:-1")
 
 
 def test_non_json_text_is_untouched():

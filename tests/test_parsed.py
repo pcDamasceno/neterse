@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from neterse import optimize, render
+from neterse import optimize, render, render_parsed
 
 from .corpus import (
     IP_INT_BRIEF,
@@ -121,17 +121,28 @@ def test_nested_values_and_scalars_encode_faithfully():
     ) == {"ipv4 unicast": {"prefixes": 25}}
 
 
-def test_missing_keys_and_none_render_as_empty_cells():
+def test_missing_keys_render_empty_and_none_renders_null():
+    # Decision 46: null, the empty string and a missing key are three
+    # different facts. null gets its literal, the STRING "null" is quoted
+    # so it cannot pass for one, and only a missing key is an empty cell.
     rows = [
         {"interface": "Gi0/1", "status": "up", "description": None},
         {"interface": "Gi0/2", "status": "down", "reason": "admin"},
+        {"interface": "Gi0/3", "status": "", "description": "null"},
     ]
     cands = _parsed_only(render("y" * 300, command="x", parsed=rows))
     csv = next(c for c in cands if c.source == "parsed:csv")
     lines = csv.text.splitlines()
     assert lines[0] == "interface,status,description,reason"  # unioned, first-seen order
-    assert lines[1] == "Gi0/1,up,,"
+    assert lines[1] == "Gi0/1,up,null,"
     assert lines[2] == "Gi0/2,down,,admin"
+    assert lines[3] == 'Gi0/3,,"null",'
+
+
+def test_fold_marker_keeps_null_apart_from_empty_string():
+    rows = [{"name": f"r{i}", "tenant": None, "site": ""} for i in range(12)]
+    fold = next(c for c in render_parsed(rows) if c.source == "parsed:fold")
+    assert fold.text.splitlines()[0] == "[12 rows, each: tenant=null,site=]"
 
 
 def test_cells_with_commas_quotes_and_newlines_are_quoted():
