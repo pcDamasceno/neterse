@@ -306,7 +306,11 @@ def test_mcp_api_envelope_compacts_as_named_sections():
     ])
     baseline = _compact_json(response)
     assert len(sections.text) < len(baseline)
-    assert optimize_parsed(response) == sections.text
+    # Smallest-wins may pick a reference encoder's document instead: with
+    # the gcf/toon extras installed (the `test` extra pulls both),
+    # toon-format >= 1.0 and gcf-python >= 2.8 encode whole envelopes,
+    # round-trip verified (decision 36). The winner is never larger.
+    assert len(optimize_parsed(response)) <= len(sections.text)
 
 
 def test_nested_children_tabulate_as_indented_subtables():
@@ -424,7 +428,11 @@ def test_sections_tables_fold_too():
     assert 'status:"ok"' in sections.text
     assert "[6 rows, each: tenant=prod,state=applied]" in sections.text
     assert "name,vlan" in sections.text
-    assert optimize_parsed(response) == sections.text
+    # Smallest-wins may pick a reference encoder's document instead: with
+    # the gcf/toon extras installed (the `test` extra pulls both),
+    # toon-format >= 1.0 and gcf-python >= 2.8 encode whole envelopes,
+    # round-trip verified (decision 36). The winner is never larger.
+    assert len(optimize_parsed(response)) <= len(sections.text)
 
 
 def test_fold_under_a_profile_keeps_the_omission_marker():
