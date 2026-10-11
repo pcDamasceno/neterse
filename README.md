@@ -87,7 +87,17 @@ A future library is a small source adapter
 
 The same payloads reach agents through MCP servers, and the client's
 server config is the one seam you control for every server — so neterse
-ships a proxy (`pip install "neterse[mcp]"`).
+ships a proxy. Install it with the `gcf` extra:
+
+```bash
+pip install "neterse[mcp,gcf]"
+```
+
+`mcp` alone runs the proxy. `gcf` adds the GCF reference encoder, which
+compacts nested JSON that neterse's own encoders leave unchanged — for
+example GraphQL responses wrapped in `{"data": ...}` with nested lists
+and objects. On NetBox GraphQL device and interface queries it removed
+33–43% of o200k tokens, where `neterse[mcp]` alone removed none.
 
 ### Wrap any server from your client's config
 
@@ -127,10 +137,11 @@ block onto the command line, curl-style and repeatable:
 ```
 
 No global install needed —
-`"command": "uvx", "args": ["--from", "neterse[mcp]", "neterse-mcp", ...]`
+`"command": "uvx", "args": ["--from", "neterse[mcp,gcf]", "neterse-mcp", ...]`
 resolves it on the fly, and from a source checkout use
 `"command": "uv", "args": ["run", "--isolated", "--with-editable",
-"/path/to/neterse", "--with", "fastmcp", "neterse-mcp", ...]` —
+"/path/to/neterse", "--with", "fastmcp", "--with", "gcf-python",
+"neterse-mcp", ...]` —
 `--isolated` matters: without it, a workspace venv that has any released
 `neterse` installed can shadow the checkout and silently run old code
 (`uvx` is isolated by nature).
@@ -154,9 +165,12 @@ count preserved — lossless, like everything on the default path.
 
 Per `tools/call` result, a text block whose content is JSON comes back
 re-encoded through the parsed tier (vendor envelopes like ACI `imdata`
-included) — and only when strictly smaller than the wire text; nothing
-ever grows. A `structuredContent` that merely mirrors that block — the
-way FastMCP duplicates every tool return — follows it instead of
+and Infrahub GraphQL `edges` included, and TOON rows a server
+pre-encoded into a JSON string field) — and only when strictly smaller
+than the wire text; nothing ever grows. JSON `null` renders as `null`,
+never as an empty cell, so it stays apart from an empty string. A
+`structuredContent` that merely mirrors that block — the way FastMCP
+duplicates every tool return — follows it instead of
 smuggling the original back beside the compacted text: the
 `{"result": <text>}` string mirror is rewritten, a deep-equal copy is
 dropped, and listed tools shed `outputSchema` accordingly (the proxy's

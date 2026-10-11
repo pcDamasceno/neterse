@@ -277,7 +277,11 @@ Callable[[Any], Optional[list[dict]]]
 
 It receives an already-decoded structure and returns neterse's **canonical
 row shape** — a non-empty list of string-keyed dicts, one dict per row — or
-`None` for "not my shape" (raising also means "not mine").
+`None` for "not my shape" (raising also means "not mine"). It can also
+receive a string: the sections encoder offers string fields too, because
+some servers pre-encode their rows as text inside a JSON field
+(`neterse/normalizers/_toon.py`, decision 48). Return `None` for any
+type you do not handle.
 
 (Why not a YAML spec with a "rows live at this path" pointer, like the
 CLI specs? Because the sections encoder already finds row collections

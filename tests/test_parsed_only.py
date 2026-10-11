@@ -306,7 +306,11 @@ def test_mcp_api_envelope_compacts_as_named_sections():
     ])
     baseline = _compact_json(response)
     assert len(sections.text) < len(baseline)
-    assert optimize_parsed(response) == sections.text
+    # Smallest-wins may pick a reference encoder's document instead: with
+    # the gcf/toon extras installed (the `test` extra pulls both),
+    # toon-format >= 1.0 and gcf-python >= 2.8 encode whole envelopes,
+    # round-trip verified (decision 36). The winner is never larger.
+    assert len(optimize_parsed(response)) <= len(sections.text)
 
 
 def test_nested_children_tabulate_as_indented_subtables():
@@ -424,7 +428,11 @@ def test_sections_tables_fold_too():
     assert 'status:"ok"' in sections.text
     assert "[6 rows, each: tenant=prod,state=applied]" in sections.text
     assert "name,vlan" in sections.text
-    assert optimize_parsed(response) == sections.text
+    # Smallest-wins may pick a reference encoder's document instead: with
+    # the gcf/toon extras installed (the `test` extra pulls both),
+    # toon-format >= 1.0 and gcf-python >= 2.8 encode whole envelopes,
+    # round-trip verified (decision 36). The winner is never larger.
+    assert len(optimize_parsed(response)) <= len(sections.text)
 
 
 def test_fold_under_a_profile_keeps_the_omission_marker():
@@ -468,3 +476,83 @@ def test_folded_parent_rows_still_anchor_their_subtables():
     best = optimize_parsed({"items": all_constant})
     assert "each:" not in best                          # fold skipped
     assert best.count("fvAEPg") == 4                    # rows kept as anchors
+
+
+# ---------------------------------------------------------------------------
+# GraphQL responses and TOON-in-a-string fields (decisions 46-48)
+# ---------------------------------------------------------------------------
+
+GRAPHQL = {"NetboxDevice": {"count": 2, "edges": [
+    {"node": {
+        "name": {"value": "CE-CUSTC-01"},
+        "status": {"value": "active"},
+        "tenant": {"node": None},
+        "interfaces": {"count": 2, "edges": [
+            {"node": {"name": {"value": "ethernet-1/1"}, "enabled": {"value": False}}},
+            {"node": {"name": {"value": "ethernet-1/2"}, "enabled": {"value": False}}},
+        ]},
+    }},
+    {"node": {
+        "name": {"value": "CORE-RR-01"},
+        "status": {"value": "active"},
+        "tenant": {"node": {"display_label": "T1"}},
+        "interfaces": {"count": 1, "edges": [
+            {"node": {"name": {"value": "Ethernet0/0"}, "enabled": {"value": True}}},
+        ]},
+    }},
+]}}
+
+
+def test_graphql_response_compacts_as_sections_with_subtables():
+    sections = next(c for c in render_parsed(GRAPHQL) if c.source == "parsed:sections")
+    assert sections.text == "\n".join([
+        "NetboxDevice:",
+        "  count:2",
+        "  edges:",
+        "    name,status,tenant",
+        "    CE-CUSTC-01,active,null",
+        "      interfaces:",
+        "        name,enabled",
+        "        ethernet-1/1,false",
+        "        ethernet-1/2,false",
+        "    CORE-RR-01,active,T1",
+        "      interfaces:",
+        "        name,enabled",
+        "        Ethernet0/0,true",
+    ])
+    assert sections.dropped_fields == ()
+    assert len(sections.text) < len(_compact_json(GRAPHQL))
+
+
+def test_a_flat_keyed_mapping_still_leaves_sections_out():
+    # Decision 47 lets sections compete only when the claimed rows nest
+    # row-collections; a plain NAPALM-style keyed getter stays CSV's.
+    flat = {"Eth1": {"is_up": True, "mtu": 1500}, "Eth2": {"is_up": False, "mtu": 9216}}
+    assert "parsed:sections" not in {c.source for c in render_parsed(flat)}
+
+
+TOON_FIELD = {
+    "nodes": "[2]:\n  - index: u1\n    name: r1\n    tenant: null\n    desc: \"\"\n"
+             "  - index: u2\n    name: r2\n    tenant: T\n    desc: \"\"",
+    "count": 2,
+    "has_more": False,
+}
+
+
+def test_toon_text_in_a_string_field_compacts_as_a_table():
+    sections = next(c for c in render_parsed(TOON_FIELD) if c.source == "parsed:sections")
+    assert sections.text == "\n".join([
+        "nodes:",
+        "  index,name,tenant,desc",
+        "  u1,r1,null,",
+        "  u2,r2,T,",
+        "count:2",
+        "has_more:false",
+    ])
+    assert optimize_parsed(TOON_FIELD) == sections.text
+
+
+def test_an_ordinary_string_field_is_not_mistaken_for_a_table():
+    payload = {"note": "[1] see the footnote", "rows": [{"a": 1}, {"a": 2}]}
+    sections = next(c for c in render_parsed(payload) if c.source == "parsed:sections")
+    assert sections.text.splitlines()[0] == 'note:"[1] see the footnote"'
