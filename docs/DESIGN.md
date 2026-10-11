@@ -1,6 +1,6 @@
 # neterse — design, topology, and plan
 
-*Status: 0.5.0 cut, phase 8 opened — Phase 6 (spec-compliant TOON and GCF
+*Status: 0.6.0 cut, phase 8 opened — Phase 6 (spec-compliant TOON and GCF
 generic-profile interop candidates in the parsed tier) plus the
 `neterse.normalizers` seam, nested-collection sections, and delegation to
 the spec authors' own encoders behind the `gcf`/`toon` extras
@@ -9,8 +9,9 @@ the spec authors' own encoders behind the `gcf`/`toon` extras
 `neterse-mcp` proxy and `CompactMiddleware` behind the `mcp` extra
 (decision 38) — validated live against ACI and SD-WAN fabrics, with
 constant-column folding (decision 39) and the `api_shapes` corpus as the
-vendor contribution funnel (decision 40). Published on PyPI through
-0.5.0; each version's publish awaits the maintainer's tag
+vendor contribution funnel (decision 40), and since validated live
+against Infrahub through infrahub-mcp (decisions 46–48). Published on
+PyPI through 0.5.0; each version's publish awaits the maintainer's tag
 (docs/RELEASING.md).
 This document is the project's source of truth for architecture and
 roadmap; decisions recorded here are binding until a new entry supersedes

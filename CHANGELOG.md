@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-11
 
 ### Infrahub through the MCP proxy (decisions 46–48)
 

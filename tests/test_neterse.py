@@ -45,7 +45,7 @@ from .corpus import (
 # ===========================================================================
 
 def test_version_and_exports():
-    assert __version__ == "0.5.0"
+    assert __version__ == "0.6.0"
     assert callable(optimize) and callable(render) and callable(register)
     assert callable(iter_compressors)
 
