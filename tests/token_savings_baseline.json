@@ -2,7 +2,7 @@
   "encoding": "o200k_base",
   "tiktoken_version": "0.13.0",
   "total_raw_tokens": 6740,
-  "total_neterse_tokens": 3733,
+  "total_neterse_tokens": 3767,
   "families": {
     "acl": {
       "raw_tokens": 49,
@@ -110,7 +110,7 @@
     },
     "intf-detail-down": {
       "raw_tokens": 106,
-      "neterse_tokens": 43
+      "neterse_tokens": 53
     },
     "intf-detail-ios": {
       "raw_tokens": 70,
@@ -118,7 +118,7 @@
     },
     "intf-detail-nxos": {
       "raw_tokens": 335,
-      "neterse_tokens": 60
+      "neterse_tokens": 84
     },
     "intf-status": {
       "raw_tokens": 122,
