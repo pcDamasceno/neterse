@@ -311,6 +311,68 @@ def test_ios_interface_detail_still_works():
     assert "crc=2" in out
 
 
+IOS_INTF_IDENTITY = (
+    "GigabitEthernet4 is up, line protocol is up\n"
+    "  Hardware is vNIC, address is 5001.0003.0003 (bia 5001.0003.0004)\n"
+    "  Description: oob-mgmt\n"
+    "  Internet address is 192.0.2.14/24\n"
+    "  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec,\n"
+    "  5 minute input rate 2000 bits/sec, 3 packets/sec\n"
+    "Loopback0 is up, line protocol is up\n"
+    "  Hardware is Loopback\n"
+    "  Internet address is 198.51.100.1/32\n"
+    "  MTU 1514 bytes, BW 8000000 Kbit/sec, DLY 5000 usec,\n"
+    "GigabitEthernet5 is administratively down, line protocol is down\n"
+    "  Hardware is vNIC, address is 5001.0003.0005 (bia 5001.0003.0005)\n"
+    "  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec,\n"
+)
+
+
+def test_ios_interface_detail_keeps_ip_prefix_and_mac():
+    assert optimize("show interfaces", IOS_INTF_IDENTITY).splitlines() == [
+        'GigabitEthernet4 | status=up/up | desc="oob-mgmt" | ip=192.0.2.14/24 | '
+        "mac=5001.0003.0003 | mtu=1500 | bw=1000000Kbit | in_bps=2000",
+        "Loopback0 | status=up/up | ip=198.51.100.1/32 | mtu=1514 | bw=8000000Kbit",
+        "GigabitEthernet5 | status=admin-down/down | mac=5001.0003.0005 | mtu=1500 | "
+        "bw=1000000Kbit",
+    ]
+
+
+def test_nxos_interface_detail_keeps_ip_prefix_and_mac():
+    raw = (
+        "Ethernet1/1 is up\n"
+        "admin state is up, Dedicated Interface\n"
+        "  Hardware: 1000/10000 Ethernet, address: 5254.0012.3456 (bia 5254.0012.3456)\n"
+        "  Internet Address is 203.0.113.9/30\n"
+        "  MTU 1500 bytes, BW 1000000 Kbit, DLY 10 usec\n"
+    )
+    out = optimize("show interface ethernet1/1", raw)
+    assert "ip=203.0.113.9/30" in out and "mac=5254.0012.3456" in out
+
+
+def test_eos_interface_detail_keeps_ip_prefix_and_mac():
+    raw = (
+        "Ethernet1 is up, line protocol is up (connected)\n"
+        "  Hardware is Ethernet, address is 001c.7300.0001 (bia 001c.7300.0001)\n"
+        "  Internet address is 192.0.2.1/31\n"
+        "  IP MTU 1500 bytes, BW 10000000 kbit\n"
+    )
+    out = optimize("show interfaces", raw)
+    assert "ip=192.0.2.1/31" in out and "mac=001c.7300.0001" in out
+
+
+def test_interface_detail_ignores_lines_that_only_resemble_identity():
+    raw = (
+        "Virtual-Access1 is up, line protocol is up\n"
+        "  Hardware is Virtual Access interface\n"
+        "  Internet address will be negotiated using IPCP\n"
+        "  MTU 1500 bytes, BW 100000 Kbit/sec\n"
+        "  Tunnel source 192.0.2.1, destination address is unknown\n"
+    )
+    out = optimize("show interfaces", raw)
+    assert "ip=" not in out and "mac=" not in out
+
+
 def test_eigrp_neighbors_csv():
     out = optimize("show ip eigrp neighbors", EIGRP)
     lines = out.splitlines()
