@@ -30,6 +30,16 @@ from .corpus import ALL_BODIES, ALL_COMMANDS, COMMAND_FIXTURES
 # family's NEW output is pinned by its own golden tests instead
 # (test_neterse.py / test_cisco_real_captures.py).
 INTENTIONAL_DIVERGENCES = {
+    # decision 49: interface detail keeps each interface's MAC address and
+    # IPv4 prefix. The baseline dropped both, so an agent building an inventory
+    # from "show interfaces" could not get either.
+    "decision-49-interface-identity": re.compile(
+        r"^show\s+int(?:erface|erfaces)?"
+        r"(?:\s+(?!status\b|brief\b|counters?\b|transceiver\b|switchport\b|"
+        r"capabilities\b|description\b|trunk\b|mac\b|flowcontrol\b|storm\b|"
+        r"snmp\b|purge\b)\S+)?\s*$",
+        re.IGNORECASE,
+    ),
     # decision 20: route-table faithfulness — the baseline silently drops
     # two-token protocol codes (O IA, O E2, ...) and garbles the
     # next-hop/interface columns; confirmed against live lab devices.

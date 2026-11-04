@@ -37,6 +37,13 @@ _INTF_INPUT_ERRORS = re.compile(r"(\d+)\s+input errors?")
 _INTF_OUTPUT_ERRORS = re.compile(r"(\d+)\s+output errors?")
 _INTF_CRC = re.compile(r"(\d+)\s+CRC")
 _INTF_DESCRIPTION = re.compile(r"Description:\s+(.+)")
+# IOS and EOS write "address is X", NX-OS "address: X". Requiring the MAC's shape
+# keeps "Internet address is" and "address: unknown" out.
+_INTF_MAC = re.compile(
+    r"\baddress(?:\s+is|:)\s+"
+    r"([0-9a-fA-F]{4}\.[0-9a-fA-F]{4}\.[0-9a-fA-F]{4}|(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2})\b"
+)
+_INTF_IP = re.compile(r"Internet address is\s+(\d+\.\d+\.\d+\.\d+/\d+)", re.IGNORECASE)
 
 
 def _compress_interfaces(raw: str) -> str:
@@ -53,6 +60,10 @@ def _compress_interfaces(raw: str) -> str:
                 parts.append(f'reason="{current["reason"]}"')
             if current.get("desc"):
                 parts.append(f'desc="{current["desc"]}"')
+            if current.get("ip"):
+                parts.append(f"ip={current['ip']}")
+            if current.get("mac"):
+                parts.append(f"mac={current['mac']}")
             if current.get("mtu"):
                 parts.append(f"mtu={current['mtu']}")
             if current.get("bw"):
@@ -96,7 +107,8 @@ def _compress_interfaces(raw: str) -> str:
             current["status"] = m.group(1)
             continue
         for regex, key in [
-            (_INTF_MTU, "mtu"), (_INTF_INPUT_RATE, "in_rate"),
+            (_INTF_MTU, "mtu"), (_INTF_IP, "ip"), (_INTF_MAC, "mac"),
+            (_INTF_INPUT_RATE, "in_rate"),
             (_INTF_OUTPUT_RATE, "out_rate"), (_INTF_INPUT_ERRORS, "in_err"),
             (_INTF_OUTPUT_ERRORS, "out_err"), (_INTF_CRC, "crc"),
         ]:
