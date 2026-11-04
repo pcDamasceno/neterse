@@ -5,7 +5,7 @@
 - **Interface detail keeps MAC and IPv4 prefix** (decision 49). `show
   interfaces` output on IOS, NX-OS and EOS now includes `ip=` and `mac=`. They
   were dropped, so an agent building an inventory from this command could
-  collect neither.
+  collect neither. Corpus token savings move from 44.6% to 44.1%.
 
 ## 0.6.0 — 2026-10-11
 
