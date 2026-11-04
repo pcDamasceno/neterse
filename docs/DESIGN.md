@@ -1,6 +1,6 @@
 # neterse — design, topology, and plan
 
-*Status: 0.6.0 cut, phase 8 opened — Phase 6 (spec-compliant TOON and GCF
+*Status: 0.6.1 cut, phase 8 opened — Phase 6 (spec-compliant TOON and GCF
 generic-profile interop candidates in the parsed tier) plus the
 `neterse.normalizers` seam, nested-collection sections, and delegation to
 the spec authors' own encoders behind the `gcf`/`toon` extras

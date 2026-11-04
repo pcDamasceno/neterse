@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 — 2026-11-04
 
 - **Interface detail keeps MAC and IPv4 prefix** (decision 49). `show
   interfaces` output on IOS, NX-OS and EOS now includes `ip=` and `mac=`. They
