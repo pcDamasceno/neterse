@@ -52,7 +52,7 @@ KEY_ORDER = [
     "id", "command", "platforms", "strategy",
     "row", "row_flags", "keywords", "fields",
     "header", "columns", "strip_columns", "context_prefixes",
-    "unindented_rows_only", "row_match", "first_col_wraps", "joiner",
+    "unindented_rows_only", "strict_rows", "row_match", "first_col_wraps", "joiner",
     "dropped_fields", "profiles", "doc",
 ]
 
@@ -61,7 +61,7 @@ STRATEGY_KEYS: Dict[str, Dict[str, set]] = {
     "line_regex_table": {
         "required": {"row", "header"},
         "optional": {"row_flags", "columns", "strip_columns",
-                     "context_prefixes", "unindented_rows_only", "profiles"},
+                     "context_prefixes", "unindented_rows_only", "strict_rows", "profiles"},
     },
     "fixed_width_table": {
         "required": {"keywords", "header"},
@@ -239,6 +239,9 @@ def validate(path: Path, data: Any) -> Dict[str, Any]:
         if "unindented_rows_only" in spec:
             _require(isinstance(spec["unindented_rows_only"], bool), path,
                      "unindented_rows_only must be a boolean")
+        if "strict_rows" in spec:
+            _require(isinstance(spec["strict_rows"], bool), path,
+                     "strict_rows must be a boolean")
 
     elif strategy == "fixed_width_table":
         names = _header_names(spec, path)

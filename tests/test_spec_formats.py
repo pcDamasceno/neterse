@@ -233,15 +233,16 @@ def test_numbers_encode_canonically():
     assert _number_literal(1e16) == "10000000000000000"
     assert _number_literal(1.25e-7) == "1.25e-7"    # out of range → exponent
     assert _number_literal(1e21) == "1e+21"         # exponent keeps its sign
-    assert _number_literal(float("nan")) is None    # caller maps to its null
+    assert _number_literal(float("nan")) is None    # format must decline
     assert _number_literal(float("inf")) is None
 
 
-def test_non_finite_floats_become_each_formats_null():
-    rows = [{"v": float("nan"), "w": 1.0}]
-    encoded = _encoded(rows)
-    assert encoded["parsed:toon"] == "[1]{v,w}:\n  null,1"
-    assert encoded["parsed:gcf"].splitlines()[2] == "-|1"
+def test_non_finite_floats_are_never_replaced_with_null():
+    for value in (float("nan"), float("inf"), float("-inf")):
+        encoded = _encoded([{"v": value, "w": 1.0}])
+        assert "parsed:toon" not in encoded
+        assert "parsed:gcf" not in encoded
+        assert "null" not in encoded["parsed:csv"]
 
 
 def test_true_booleans_and_null_are_bare_literals():

@@ -47,6 +47,16 @@ def test_jsonl_rejects_malformed_lines(tmp_path):
         load_samples([path], command=None)
 
 
+@pytest.mark.parametrize("fields", [
+    {"command": 42}, {"command": ["show clock"]},
+    {"platform": ["cisco_ios"]}, {"platform": False},
+])
+def test_jsonl_invalid_field_types_report_location(tmp_path, fields):
+    path = _jsonl(tmp_path, [{"command": "show clock", "raw": "data", **fields}])
+    with pytest.raises(SystemExit, match=r"samples.jsonl:1:"):
+        load_samples([path], command=None)
+
+
 def test_raw_capture_file_needs_command(tmp_path):
     p = tmp_path / "capture.txt"
     p.write_text(STATUS)

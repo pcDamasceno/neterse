@@ -89,7 +89,7 @@ from .registry import (  # noqa: F401  (re-exported)
     register_spec,
 )
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 __all__ = [
     "Candidate",
@@ -344,6 +344,11 @@ def render_parsed(parsed: Any, *, profile: str = "default") -> list:
     baseline = _parsed_baseline(parsed)
     if baseline is None:
         return []
+    return _render_parsed_against(parsed, baseline, profile)
+
+
+def _render_parsed_against(parsed: Any, baseline: str, profile: str) -> list:
+    """Share one serialized baseline between rendering and selection."""
     try:
         encoded = _parsed_tier.encode(parsed, _profile_key(profile))
     except Exception:
@@ -381,7 +386,7 @@ def optimize_parsed(parsed: Any, *, profile: str = "default") -> str:
         except Exception:
             return object.__repr__(parsed)
     best: Optional[Candidate] = None
-    for candidate in render_parsed(parsed, profile=profile):
+    for candidate in _render_parsed_against(parsed, baseline, profile):
         if best is None or len(candidate.text) < len(best.text):
             best = candidate
     return best.text if best is not None else baseline

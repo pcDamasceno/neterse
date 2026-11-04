@@ -7,34 +7,47 @@ on:
   push:
     tags: ["v*"]
 
+permissions:
+  contents: read
+
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: validate
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12"
-      - name: Tag must match the package version
+      - name: Tag and both package versions must agree
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          VERSION=$(python -c "import re,pathlib;print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path('neterse/__init__.py').read_text()).group(1))")
-          test "$TAG" = "$VERSION" || { echo "tag v$TAG != neterse.__version__ $VERSION"; exit 1; }
+          python - <<'EOF'
+          import os, re, pathlib, tomllib
+          metadata = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          source = pathlib.Path("neterse/__init__.py").read_text()
+          version = re.search(r'__version__ = "([^"]+)"', source).group(1)
+          assert os.environ["GITHUB_REF_NAME"] == "v" + version
+          assert metadata["project"]["version"] == version
+          EOF
       - name: Build sdist + wheel
         run: pip install build && python -m build
       - name: Smoke-test the wheel (import, CLI, zero-dep guard)
         run: |
           pip install dist/*.whl
-          python - <<'EOF'
+          python -I - <<'EOF'
           import importlib.metadata as md
           import neterse
+          assert neterse.__version__ == md.version("neterse")
           deps = md.requires("neterse") or []
           runtime = [d for d in deps if "extra ==" not in d]
           assert not runtime, f"runtime deps crept in: {runtime}"
           print("neterse", neterse.__version__, "- zero runtime dependencies: OK")
           EOF
           neterse --version
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: dist
           path: dist/
@@ -46,11 +59,11 @@ jobs:
     permissions:
       id-token: write        # Trusted Publishing (no API token stored)
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: dist
           path: dist/
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
 
   github-release:
     needs: publish
@@ -58,7 +71,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Extract this version's CHANGELOG section
         run: |
           VERSION="${GITHUB_REF_NAME#v}"

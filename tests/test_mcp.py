@@ -8,7 +8,6 @@ of pytest-asyncio.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 from pathlib import Path
 
@@ -17,6 +16,12 @@ import pytest
 from neterse.mcp import compact_result, compact_text
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_compaction_budget_passes_through_without_truncating():
+    text = json.dumps([{"description": "a long value"}] * 20, indent=2)
+    assert compact_text(text, max_chars=10) is text
+    assert len(compact_text(text, max_chars=len(text))) < len(text)
 
 # The shape the aci verification target returns: an APIC envelope whose
 # imdata list the cisco_aci normalizer claims.
@@ -190,114 +195,6 @@ def test_unclaimed_results_return_the_same_object():
         assert compact_result(result) is result
 
 
-# ---------------------------------------------------------------------------
-# CompactMiddleware — through a real in-memory FastMCP server
-# ---------------------------------------------------------------------------
-
-fastmcp = pytest.importorskip("fastmcp", reason="needs the mcp extra")
-
-
-def _server(ledger=False):
-    from fastmcp import FastMCP
-
-    from neterse.mcp import CompactMiddleware
-
-    mcp = FastMCP("toy")
-
-    @mcp.tool
-    def tenants() -> str:
-        return PRETTY
-
-    # dict return + declared output schema: FastMCP mirrors the return
-    # into structuredContent AND the server layer enforces that every
-    # result carries structured output — the exact upstream shape that
-    # both negated the savings and rejected a plain drop in the field
-    @mcp.tool(output_schema={"type": "object", "additionalProperties": True})
-    def tenants_obj() -> dict:
-        return ENVELOPE
-
-    @mcp.tool
-    def freeform() -> str:
-        return RAW_CLI
-
-    @mcp.tool
-    def broken() -> str:
-        raise ValueError("upstream failure")
-
-    mcp.add_middleware(CompactMiddleware(ledger=ledger))
-    return mcp
-
-
-def _call(server, tool):
-    from fastmcp import Client
-
-    async def scenario():
-        async with Client(server) as client:
-            return await client.call_tool(tool, {}, raise_on_error=False)
-
-    return asyncio.run(scenario())
-
-
-def test_middleware_compacts_json_tool_results():
-    result = _call(_server(), "tenants")
-    text = result.content[0].text
-    assert len(text) < len(PRETTY)
-    assert "uni/tn-common" in text
-
-
-def test_middleware_drops_the_structured_duplicate():
-    """A dict-returning tool arrives with text + a structuredContent
-    mirror; after compaction only the compacted text may remain, the
-    call must not become an output-validation error, and the client must
-    accept the result."""
-    result = _call(_server(), "tenants_obj")
-    assert not result.is_error, result.content[0].text
-    assert len(result.content[0].text) < len(json.dumps(ENVELOPE, indent=2))
-    assert result.structured_content is None
-
-
-def test_listed_tools_shed_the_output_schema_while_dedupe_is_on():
-    """Dropping structured output obliges the listing to stop promising
-    it — otherwise the MCP server layer rejects the compacted result."""
-    from fastmcp import Client
-
-    async def scenario(server):
-        async with Client(server) as client:
-            return {t.name: t.outputSchema for t in await client.list_tools()}
-
-    schemas = asyncio.run(scenario(_server()))
-    assert schemas["tenants_obj"] is None
-    # opting out restores the upstream contract verbatim
-    from neterse.mcp import CompactMiddleware
-    from fastmcp import FastMCP
-
-    mcp = FastMCP("toy2")
-
-    @mcp.tool(output_schema={"type": "object", "additionalProperties": True})
-    def tenants_obj() -> dict:
-        return ENVELOPE
-
-    mcp.add_middleware(CompactMiddleware(ledger=False, dedupe_structured=False))
-    schemas = asyncio.run(scenario(mcp))
-    assert schemas["tenants_obj"] is not None
-
-
-def test_middleware_leaves_non_json_results_alone():
-    result = _call(_server(), "freeform")
-    assert result.content[0].text == RAW_CLI
-
-
-def test_middleware_passes_errors_through():
-    result = _call(_server(), "broken")
-    assert result.is_error
-
-
-def test_ledger_reports_the_win(capfd):
-    _call(_server(ledger=True), "tenants")
-    err = capfd.readouterr().err
-    assert "[neterse] tenants:" in err and "chars" in err
-
-
 def test_module_imports_and_placeholder_names_the_extra(monkeypatch):
     """Without fastmcp, ``import neterse.mcp`` must still succeed (the
     pure core is stdlib) and the middleware class must raise a
@@ -350,8 +247,7 @@ def test_proxy_refuses_headers_on_a_stdio_upstream():
     unauthenticated with no hint why; the CLI must refuse instead.
     (argparse error -> SystemExit(2), raised before any proxy starts,
     so the test needs no fastmcp server.)"""
-    pytest.importorskip("fastmcp")
     from neterse.mcp import main
 
     with pytest.raises(SystemExit):
-        main(["python", "server.py", "--header", "Authorization: Bearer x"])
+        main(["--header", "Authorization: Bearer x", "--", "python", "server.py"])

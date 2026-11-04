@@ -136,13 +136,13 @@ def test_missing_keys_render_empty_and_none_renders_null():
     assert lines[0] == "interface,status,description,reason"  # unioned, first-seen order
     assert lines[1] == "Gi0/1,up,null,"
     assert lines[2] == "Gi0/2,down,,admin"
-    assert lines[3] == 'Gi0/3,,"null",'
+    assert lines[3] == 'Gi0/3,"""""","""null""",'
 
 
 def test_fold_marker_keeps_null_apart_from_empty_string():
     rows = [{"name": f"r{i}", "tenant": None, "site": ""} for i in range(12)]
     fold = next(c for c in render_parsed(rows) if c.source == "parsed:fold")
-    assert fold.text.splitlines()[0] == "[12 rows, each: tenant=null,site=]"
+    assert fold.text.splitlines()[0] == '[12 rows, each: tenant=null,site=""""""]'
 
 
 def test_cells_with_commas_quotes_and_newlines_are_quoted():

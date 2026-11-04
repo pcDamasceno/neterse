@@ -10,4 +10,5 @@ strategy: line_regex_table
 row: '^(\d+)\s+(\S+)\s+(up|down)\s+(\S+)\s+(\S+)\s*(.*)?$'
 header: vlan,name,status,reason,type,interfaces
 strip_columns: [6]
+strict_rows: true
 dropped_fields: []

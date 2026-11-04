@@ -47,6 +47,8 @@ everything else here.
 from __future__ import annotations
 
 import json
+import asyncio
+import re
 import sys
 from typing import Any, List, Optional
 
@@ -55,7 +57,7 @@ from . import compact as _compact
 __all__ = ["CompactMiddleware", "compact_result", "compact_text", "main"]
 
 
-def compact_text(text: str) -> str:
+def compact_text(text: str, *, max_chars: Optional[int] = None) -> str:
     """The smallest faithful text for one MCP text block.
 
     Claims *text* only when it json-decodes to a list or dict — scalars
@@ -64,8 +66,11 @@ def compact_text(text: str) -> str:
     through :func:`neterse.compact`; the result replaces *text* only when
     strictly smaller. Everything else — non-JSON, scalars, a compaction
     that did not win — returns *text* unchanged.
+    ``max_chars`` optionally skips oversized blocks without truncating.
     """
     if not isinstance(text, str):
+        return text
+    if max_chars is not None and len(text) > max_chars:
         return text
     stripped = text.strip()
     if not stripped or stripped[0] not in "[{":
@@ -195,13 +200,21 @@ if _FastMCPMiddleware is not None:
         contract this middleware actually provides is "the text block is
         the payload" (input schemas are untouched; structured content
         that survives dedupe still flows, just unvalidated).
+
+        ``max_input_chars`` optionally bounds compaction work by passing
+        larger blocks through intact. Blocks over 64 Ki characters run in
+        a worker thread; custom normalizers used here must be thread-safe.
         """
 
         def __init__(
-            self, *, ledger: bool = True, dedupe_structured: bool = True
+            self, *, ledger: bool = True, dedupe_structured: bool = True,
+            max_input_chars: Optional[int] = None,
         ) -> None:
+            if max_input_chars is not None and max_input_chars < 1:
+                raise ValueError("max_input_chars must be positive")
             self.ledger = ledger
             self.dedupe_structured = dedupe_structured
+            self.max_input_chars = max_input_chars
 
         async def on_list_tools(self, context: Any, call_next: Any) -> Any:
             tools = await call_next(context)
@@ -231,7 +244,12 @@ if _FastMCPMiddleware is not None:
                         text, str
                     ):
                         continue
-                    new_text = compact_text(text)
+                    if self.max_input_chars is not None and len(text) > self.max_input_chars:
+                        new_text = text
+                    elif len(text) > 65536:
+                        new_text = await asyncio.to_thread(compact_text, text)
+                    else:
+                        new_text = compact_text(text)
                     before += len(text)
                     after += len(new_text)
                     if new_text != text:
@@ -280,10 +298,10 @@ def _parse_headers(pairs: List[str]) -> dict:
     headers = {}
     for pair in pairs:
         name, sep, value = pair.partition(":")
-        if not sep or not name.strip():
-            raise ValueError(
-                f"--header needs 'Name: value' (curl style), got {pair!r}"
-            )
+        if not sep or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", name.strip()):
+            raise ValueError("--header needs a valid HTTP header name followed by ':'")
+        if "\r" in value or "\n" in value:
+            raise ValueError("HTTP header values cannot contain carriage returns or newlines")
         headers[name.strip()] = value.strip()
     return headers
 
@@ -305,10 +323,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument(
         "upstream",
-        nargs="+",
+        nargs=argparse.REMAINDER,
         help=(
             "streamable-HTTP URL (https://host/mcp) or the stdio command "
-            "line that starts the upstream server (docker run ... / npx ...)"
+            "line that starts the upstream server. Put proxy options first; "
+            "use -- before the command (e.g. -- docker run -i --rm ...)."
         ),
     )
     parser.add_argument(
@@ -322,6 +341,21 @@ def main(argv: Optional[List[str]] = None) -> int:
             "block the client used to send to the upstream directly moves "
             "here when the proxy takes its place. URL upstreams only."
         ),
+    )
+    parser.add_argument(
+        "--header-env",
+        action="append",
+        default=[],
+        metavar="NAME=ENV_VAR",
+        help=(
+            "HTTP header read from an environment variable, e.g. "
+            "--header-env Authorization=MCP_AUTHORIZATION. "
+            "The variable contains the complete header value."
+        ),
+    )
+    parser.add_argument(
+        "--max-input-chars", type=int,
+        help="pass text blocks larger than this through unchanged (no truncation)",
     )
     parser.add_argument(
         "--quiet",
@@ -339,6 +373,43 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    upstream = args.upstream
+    if upstream[:1] == ["--"]:
+        upstream = upstream[1:]
+    if not upstream:
+        parser.error("an upstream URL or command is required")
+    is_url = upstream[0].startswith(("http://", "https://"))
+    if is_url and len(upstream) > 1:
+        # Preserve the documented URL --header spelling. For a command,
+        # every argument after the executable belongs to that command,
+        # including flags with the same names as this proxy's options.
+        args = parser.parse_args(upstream[1:], namespace=args)
+        if args.upstream:
+            parser.error("a URL upstream accepts only proxy options")
+        upstream = upstream[:1]
+    if not is_url and (args.header or args.header_env):
+        parser.error("--header and --header-env apply to URL upstreams only")
+    if args.max_input_chars is not None and args.max_input_chars < 1:
+        parser.error("--max-input-chars must be positive")
+
+    import os
+
+    try:
+        headers = _parse_headers(args.header)
+        for reference in args.header_env:
+            name, sep, variable = reference.partition("=")
+            if (
+                not sep
+                or not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", name)
+                or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", variable)
+            ):
+                raise ValueError("--header-env needs NAME=ENV_VAR")
+            if variable not in os.environ:
+                raise ValueError(f"--header-env variable {variable!r} is not set")
+            headers.update(_parse_headers([f"{name}: {os.environ[variable]}"]))
+    except ValueError as exc:
+        parser.error(str(exc))
+
     try:
         from fastmcp.server import create_proxy
     except ImportError:
@@ -350,24 +421,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
         create_proxy = FastMCP.as_proxy
 
-    upstream = args.upstream
-    if len(upstream) == 1 and upstream[0].startswith(("http://", "https://")):
+    if is_url:
         backend: Any = upstream[0]
-        if args.header:
-            try:
-                headers = _parse_headers(args.header)
-            except ValueError as exc:
-                parser.error(str(exc))
+        if headers:
             from fastmcp.client.transports import StreamableHttpTransport
 
             backend = StreamableHttpTransport(upstream[0], headers=headers)
     else:
-        if args.header:
-            # Silently ignoring an auth header would leave the upstream
-            # unauthenticated with no hint why — refuse instead.
-            parser.error("--header applies to URL upstreams only")
-        import os
-
         from fastmcp.client.transports import StdioTransport
 
         # The host applied the config's env block to THIS process; the
@@ -382,6 +442,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         CompactMiddleware(
             ledger=not args.quiet,
             dedupe_structured=not args.keep_structured,
+            max_input_chars=args.max_input_chars,
         )
     )
     proxy.run(show_banner=False)

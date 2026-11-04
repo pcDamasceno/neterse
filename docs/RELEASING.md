@@ -22,6 +22,8 @@ steps below are the human parts. Distribution, import, and CLI are all
    the workflow refuses a mismatched tag):
    - `neterse/__init__.py` → `__version__`
    - `pyproject.toml` → `version`
+   Update the version assertion in `tests/test_neterse.py` and run `uv lock`
+   to refresh the editable project's version in `uv.lock`.
 2. Update `CHANGELOG.md`; record any baseline decisions in
    `docs/DESIGN.md` (byte-parity or token-baseline changes).
 3. Commit, push, wait for CI green (tests + token-savings job).
@@ -31,8 +33,11 @@ steps below are the human parts. Distribution, import, and CLI are all
    git tag v0.1.0 && git push origin v0.1.0
    ```
 
-   The workflow builds sdist+wheel, verifies tag == version, smoke-tests
-   the wheel (import, `neterse --version`, zero-dep guard), and publishes.
+   The workflow first runs CI against the tagged commit (core and all
+   extras, drift checks, token savings, and dependency audit). It then
+   builds sdist+wheel, verifies the tag and both version declarations,
+   smoke-tests the installed wheel in isolated Python mode (import,
+   `neterse --version`, zero-dep guard), and publishes.
 5. Verify: `pip install neterse==<version>` in a clean venv;
    `python -c "import neterse; print(neterse.__version__)"`.
 

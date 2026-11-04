@@ -7,4 +7,5 @@ strategy: line_regex_table
 row: '^(\d+)\s+(\S+)\s+(active|act/unsup|sus\S*)\s*(.*)?$'
 header: vlan,name,status,ports
 strip_columns: [4]
+strict_rows: true
 dropped_fields: []

@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 # by an abandoned 2019 package. Distribution, import, and CLI
 # share the one name.
 name = "neterse"
-version = "0.6.1"                     # keep in lockstep with neterse.__version__
+version = "0.7.0"                     # keep in lockstep with neterse.__version__
 description = "neterse — minimum-token renderings of network CLI output for LLM agents. The `| brief` the vendor never shipped."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -67,7 +67,9 @@ tokens = ["tiktoken"]
 # that compacts ANY server's results from the client's config seam, and
 # CompactMiddleware for FastMCP servers you author. The pure seam
 # (compact_text / compact_result) is stdlib and works without this.
-mcp = ["fastmcp>=3"]
+# Supported 3.x API; these floors include the October 2026 security fixes.
+# A future major needs an integration-test pass before widening this range.
+mcp = ["fastmcp>=3.4.10,<4", "mcp>=1.30.0,<2"]
 #
 # --- aggregates --------------------------------------------------------
 # Everything above, for people who would rather not track which capability
@@ -101,3 +103,7 @@ neterse = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.uv]
+# Repository tooling uses the same tokenizer as the committed savings baseline.
+constraint-dependencies = ["tiktoken==0.13.0"]

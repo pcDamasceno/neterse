@@ -21,7 +21,9 @@ Strategies:
     skip indented lines BEFORE stripping — for tables whose data rows
     start at column 0, so wrapped continuation lines can never
     false-match; e.g. IOS cdp wraps a long device ID onto its own line
-    and indents the remaining columns).
+    and indents the remaining columns). ``strict_rows`` makes an
+    unexpected nonblank, nonseparator line after data begins decline the
+    whole table, preserving wrapped or unfamiliar rows (decision 51).
 
 ``fixed_width_table``
     Offset-sliced fixed-width table → CSV, driven by the header keywords
@@ -60,7 +62,8 @@ Byte-compatibility note: these strategies reproduce the historical
 hand-written compressors exactly (None groups render as empty fields, a
 header with no data rows fails open, context lines prepend with a single
 newline). The parity suite pins this — restructure freely, but outputs
-must not move.
+must not move except for recorded corrections, including CSV escaping
+and strict VLAN rows in decision 51.
 """
 
 from __future__ import annotations
@@ -112,12 +115,15 @@ def _projection(spec: Dict[str, Any], profile: str) -> Projection:
 def _line_regex_table(
     spec: Dict[str, Any], projection: Optional[Projection] = None
 ) -> Compressor:
+    from ._compressors.helpers import _csv_row
+
     row_re = re.compile(spec["row"], spec.get("row_flags", 0))
     header = spec["header"] if projection is None else projection[1]
     columns = spec.get("columns")
     strip_columns = set(spec.get("strip_columns", ()))
     context_prefixes = tuple(spec.get("context_prefixes", ()))
     unindented_only = bool(spec.get("unindented_rows_only"))
+    strict_rows = bool(spec.get("strict_rows"))
 
     def _compress(raw: str) -> str:
         context = None
@@ -131,6 +137,10 @@ def _line_regex_table(
                 continue
             m = row_re.match(stripped)
             if not m:
+                if strict_rows and len(rows) > 1 and stripped and set(stripped) - {"-", " "}:
+                    # A wrapped or unfamiliar data row is not boilerplate.
+                    # Preserve the entire input instead of losing that row.
+                    return raw
                 continue
             indexes = columns or range(1, len(m.groups()) + 1)
             values = []
@@ -143,7 +153,7 @@ def _line_regex_table(
                 values.append(value)
             if projection is not None:
                 values = [values[i] for i in projection[0]]
-            rows.append(",".join(values))
+            rows.append(_csv_row(values))
         if len(rows) < 2:
             return raw
         body = "\n".join(rows)

@@ -72,6 +72,7 @@ matches.
 | `strip_columns` | no | Group indexes (again 1-based, and they must be *emitted* ones) whose value is `.strip()`-ed. |
 | `context_prefixes` | no | Lines starting with any of these (after stripping) are captured as a context line prepended above the header — e.g. the EIGRP process/VRF line. The last one seen wins. |
 | `unindented_rows_only` | no | Boolean: skip indented lines *before* stripping. For tables whose data rows start at column 0 — wrapped continuation lines can then never false-match (decision 25). |
+| `strict_rows` | no | Boolean: after the first data row, an unmatched nonblank, nonseparator line makes the whole compressor return raw input. Enable this for tables such as VLAN lists whose wrapped rows cannot be parsed by this strategy; unknown data must not disappear. |
 
 ## `fixed_width_table`
 

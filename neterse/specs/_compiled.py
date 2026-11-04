@@ -49,6 +49,7 @@ SPECS: list = [
         'row': '^(\\d+)\\s+(\\S+)\\s+(active|act/unsup|sus\\S*)\\s*(.*)?$',
         'header': 'vlan,name,status,ports',
         'strip_columns': [4],
+        'strict_rows': True,
         'dropped_fields': (),
     },
     {
@@ -73,6 +74,7 @@ SPECS: list = [
         'row': '^(\\d+)\\s+(\\S+)\\s+(up|down)\\s+(\\S+)\\s+(\\S+)\\s*(.*)?$',
         'header': 'vlan,name,status,reason,type,interfaces',
         'strip_columns': [6],
+        'strict_rows': True,
         'dropped_fields': (),
     },
     {
@@ -185,6 +187,7 @@ SPECS: list = [
         'row': '^(\\d+)\\s+(\\S+)\\s+(active|act/unsup|sus)\\s*(.*)?$',
         'header': 'vlan,name,status,ports',
         'strip_columns': [4],
+        'strict_rows': True,
         'dropped_fields': (),
     },
     {

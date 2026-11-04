@@ -12,6 +12,38 @@ formatting. Savings of 40–60% are typical on tabular output; on huge
 mostly-zero tables, compression is the difference between a truncated tool
 result and a complete one.
 
+## Quick start
+
+Python 3.11 or newer:
+
+```bash
+pip install neterse
+```
+
+```python
+from neterse import compact
+
+rows = [
+    {"interface": "eth1", "status": "up"},
+    {"interface": "eth2", "status": "down"},
+]
+print(compact(rows))
+```
+
+Compact a capture from a file or stdin:
+
+```bash
+neterse compact capture.txt --command 'show interface status' --platform cisco_nxos
+neterse compact response.json --input-format json --explain
+cat response.json | neterse compact --input-format json
+```
+
+`--explain` writes selection and omission metadata to stderr; stdout contains
+only the output. `--lossless-only` excludes candidates that declare dropped
+fields. The default raw CLI path can omit declared fields, including route
+ages and counters. Compression does not redact credentials or other secrets.
+See the [API and troubleshooting guide](docs/API.md) and [security policy](SECURITY.md).
+
 ```python
 from neterse import compact, render
 
@@ -118,23 +150,29 @@ A stdio upstream is the original command line, verbatim:
 ```json
 "github": {
   "command": "neterse-mcp",
-  "args": ["docker", "run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+  "args": ["--", "docker", "run", "-i", "--rm", "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
            "ghcr.io/github/github-mcp-server"],
   "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "..." }
 }
 ```
 
 (the proxy forwards its full environment to a stdio upstream, so `env`
-blocks keep working). An authenticated URL upstream moves its `headers`
-block onto the command line, curl-style and repeatable:
+blocks keep working). Put proxy options before `--`; all arguments after
+the upstream executable belong to that server. An authenticated URL upstream
+can read its complete header value from an environment variable:
 
 ```json
 "sdwan": {
   "command": "neterse-mcp",
-  "args": ["https://vmanage-mcp.example.com/mcp",
-           "--header", "Authorization: Bearer TOKEN"]
+  "args": ["--header-env", "Authorization=MCP_AUTHORIZATION",
+           "https://vmanage-mcp.example.com/mcp"],
+  "env": { "MCP_AUTHORIZATION": "Bearer ..." }
 }
 ```
+
+Use your client's secret store when available. `--header 'Name: value'`
+remains supported for nonsecret values; literal command-line credentials
+may be visible in process listings and logs.
 
 No global install needed —
 `"command": "uvx", "args": ["--from", "neterse[mcp,gcf]", "neterse-mcp", ...]`
@@ -159,7 +197,8 @@ real o200k tokens. Redundancy folds instead of repeating: a column whose
 value is identical in every row (an ACI class response repeats the class
 name and a dozen defaults per object) collapses to one leading
 `[31 rows, each: _class=fvBD,lcOwn=local,...]` line, values intact, row
-count preserved — lossless, like everything on the default path.
+count preserved. This folding preserves the canonical rows' data; raw CLI
+compressors can have declared omissions (see `Candidate.dropped_fields`).
 
 ### What the model sees
 
@@ -178,7 +217,9 @@ contract is "the text block is the payload"). Everything else passes
 through byte-identical: non-JSON text, error results, images, input
 schemas, and structured content that carries anything of its own.
 
-Flags: `--quiet` silences the ledger; `--keep-structured` disables the
+Flags: `--quiet` silences the ledger; `--max-input-chars N` leaves larger
+text blocks unchanged, without truncating them. Large blocks are compacted
+off the event loop. `--keep-structured` disables the
 dedupe and preserves upstream `structuredContent` and `outputSchema`
 verbatim (at the cost of hosts feeding the model both copies).
 
@@ -315,6 +356,7 @@ Measure coverage over your own agent's traffic with the bundled CLI:
 neterse coverage                      # list every covered family, no captures needed
 neterse audit run.jsonl --show 3      # {"command":..., "platform":..., "raw":...} per line
 neterse audit tests/fixtures          # or point it at a fixture tree
+neterse audit run.jsonl --json        # machine-readable counts and omissions
 ```
 
 It reports per-family reduction, what reached the model uncompressed

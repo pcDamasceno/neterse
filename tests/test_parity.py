@@ -30,6 +30,9 @@ from .corpus import ALL_BODIES, ALL_COMMANDS, COMMAND_FIXTURES
 # family's NEW output is pinned by its own golden tests instead
 # (test_neterse.py / test_cisco_real_captures.py).
 INTENTIONAL_DIVERGENCES = {
+    # Decision 51: a comma-bearing port list is one CSV cell, not
+    # multiple columns. Wrapped data rows now cause raw pass-through.
+    "decision-51-vlan-csv": re.compile(r"show\s+vlan\s+brief", re.IGNORECASE),
     # decision 49: interface detail keeps each interface's MAC address and
     # IPv4 prefix. The baseline dropped both, so an agent building an inventory
     # from "show interfaces" could not get either.

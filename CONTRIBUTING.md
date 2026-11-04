@@ -351,8 +351,25 @@ pip install -e ".[test]"      # pytest + PyYAML + the encoder extras (what CI in
 pytest                        # ~2000 tests, a couple of seconds, no network
 ```
 
-`.[test]` is the CI configuration exactly. Add `.[test,all]` for the
+CI tests both a core-only installation (`pip install -e . pytest PyYAML`)
+and every capability extra across Python 3.11–3.13. Pure MCP tests run
+without FastMCP; the separate integration module requires it and uses
+bounded requests. Add `.[test,all]` for the
 report tool at full power — it brings ntc-templates and tiktoken too, and
 un-skips `tests/test_token_savings.py` (pin `tiktoken==0.13.0` to match
 the committed baseline). Tests skip rather than fail when an extra is
 absent, so a bare `.[test]` checkout is still a green one.
+
+For the exact optional-dependency versions tested by CI:
+
+```bash
+uv sync --locked --all-extras
+uv run --no-sync pytest
+uv run --no-sync python scripts/benchmark.py --rows 1000 10000
+```
+
+The benchmark reports median compaction time and peak traced allocations;
+compare on the same machine with the same extras. Timing is not a flaky
+unit-test gate. Review dependency upgrades with the audit procedure in
+[SECURITY.md](SECURITY.md); keep the tokenizer pin unless changing the
+token baseline itself is intended.

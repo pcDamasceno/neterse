@@ -187,7 +187,7 @@ def test_keyed_dict_flattens_to_one_row_per_entry():
     lines = csv.text.splitlines()
     assert lines[0] == "key,is_up,description,mtu"      # outer key leads
     assert lines[1] == "Ethernet1/1,true,uplink,1500"
-    assert lines[2] == "Ethernet1/2,false,,9216"
+    assert lines[2] == 'Ethernet1/2,false,"""""",9216'
     assert len(lines) == 1 + len(KEYED_GETTER)
 
 
@@ -272,8 +272,8 @@ def test_class_attributes_wrappers_flatten_to_rows():
                if candidate.source == "parsed:csv")
     assert csv.text.splitlines() == [
         "_class,id,name,fabricSt",
-        "fabricNode,101,leaf101,active",
-        "fabricNode,102,leaf102,active",
+        'fabricNode,"""101""",leaf101,active',
+        'fabricNode,"""102""",leaf102,active',
     ]
 
 
@@ -300,8 +300,8 @@ def test_mcp_api_envelope_compacts_as_named_sections():
         '  totalCount:"2"',
         "  imdata:",
         "    _class,id,name,fabricSt",
-        "    fabricNode,101,leaf101,active",
-        "    fabricNode,102,leaf102,active",
+        '    fabricNode,"""101""",leaf101,active',
+        '    fabricNode,"""102""",leaf102,active',
         'status:"success"',
     ])
     baseline = _compact_json(response)
@@ -358,10 +358,10 @@ def test_flat_rows_are_unaffected_by_nested_handling():
         {"dn": "a", "state": "up", "extra": "[]"},      # string, not a real list
         {"dn": "b", "state": "down", "extra": "{}"},
     ]}
-    best = optimize_parsed(response)
+    best = next(c.text for c in render_parsed(response) if c.source == "parsed:sections")
     assert "items:" in best
     assert "dn,state,extra" in best                     # extra stays a column
-    assert "a,up,[]" in best and "b,down,{}" in best
+    assert 'a,up,"""[]"""' in best and 'b,down,"""{}"""' in best
 
 
 # ---------------------------------------------------------------------------
@@ -544,8 +544,8 @@ def test_toon_text_in_a_string_field_compacts_as_a_table():
     assert sections.text == "\n".join([
         "nodes:",
         "  index,name,tenant,desc",
-        "  u1,r1,null,",
-        "  u2,r2,T,",
+        '  u1,r1,null,""""""',
+        '  u2,r2,T,""""""',
         "count:2",
         "has_more:false",
     ])

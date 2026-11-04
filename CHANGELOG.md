@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.7.0 — 2026-11-04
+
+This minor release adds CLI capabilities and intentionally changes parsed CSV
+output to preserve value types. Consumers of parsed CSV should adopt the
+[typed-cell contract](docs/API.md#typed-csv-cells).
+
+- Preserve dictionaries, empty collections, and scalar values carried by
+  response objects instead of returning an empty string.
+- Distinguish missing, empty, null, numeric, boolean, and JSON-looking string
+  values in parsed CSV (decision 50). This changes ambiguous CSV bytes; see
+  [the typed-cell contract](docs/API.md#typed-csv-cells). TOON/GCF now decline
+  non-finite floats instead of replacing them with null.
+- Quote delimiter-bearing fields in raw regex tables. VLAN specs fail open
+  on wrapped or unfamiliar data rows; update the affected goldens and token
+  baseline for this intentional correction (decision 51).
+- Avoid redundant reference encoders and duplicate baseline serialization.
+  Large MCP blocks compact off the event loop; `--max-input-chars` provides
+  an optional pass-through limit without truncation.
+- Forward stdio upstream flags verbatim. Add `--header-env` for credentials
+  supplied through environment variables and reject invalid header values
+  without printing their contents.
+- Add `neterse compact`, `--lossless-only`, and `--explain`; add JSON audit
+  reports and useful errors for malformed input fields.
+- Refresh optional dependencies and require patched MCP versions. Test both
+  the core and all extras in CI, keep pure MCP tests independent of FastMCP,
+  bound integration calls with deadlines, audit dependencies weekly, and
+  require tagged-commit validation before release. Pin workflow actions.
+- Add an API/troubleshooting guide, security policy, and repeatable latency
+  and memory benchmark.
+- Validate against live DBCLI devices and Infrahub MCP: 76 device captures
+  used 56.9% fewer tokens; six successful MCP read scenarios used 13.6% fewer
+  tokens overall. See [validation results and limitations](docs/VALIDATION.md).
+
 ## 0.6.1 — 2026-11-04
 
 - **Interface detail keeps MAC and IPv4 prefix** (decision 49). `show

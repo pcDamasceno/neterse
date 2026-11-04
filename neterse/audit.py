@@ -45,7 +45,7 @@ import sys
 from pathlib import Path
 from typing import Iterable, List, Optional, Tuple
 
-from . import __version__, render
+from . import __version__, render, render_parsed
 from .registry import iter_entries
 
 # (command, platform or None, raw)
@@ -71,13 +71,17 @@ def _iter_jsonl(lines: Iterable[str], origin: str) -> Iterable[Sample]:
             raise SystemExit(f"{origin}:{n}: not JSON: {exc}")
         if not isinstance(obj, dict):
             raise SystemExit(f"{origin}:{n}: expected an object per line")
-        command = (obj.get("command") or "").strip()
+        command = obj.get("command")
         raw = obj.get("raw", obj.get("output"))
-        if not command or not isinstance(raw, str):
+        if not isinstance(command, str) or not command.strip() or not isinstance(raw, str):
             raise SystemExit(
                 f"{origin}:{n}: need string fields 'command' and 'raw' (or 'output')"
             )
-        yield command, obj.get("platform") or None, raw
+        platform = obj.get("platform")
+        if platform is not None and not isinstance(platform, str):
+            raise SystemExit(f"{origin}:{n}: 'platform' must be a string or null")
+        platform_key = platform.strip() or None if platform is not None else None
+        yield command.strip(), platform_key, raw
 
 
 def _iter_fixture_dir(root: Path) -> Iterable[Sample]:
@@ -265,6 +269,76 @@ def run_coverage(out=None) -> None:
         w(f"    command ~ {e.pattern.pattern}\n")
 
 
+def _audit_json(samples: List[Sample]) -> dict:
+    """Machine-readable savings and omissions, without capture contents."""
+    results = []
+    total_raw = total_new = 0
+    for command, platform, raw in samples:
+        size, source, dropped = _best_len(command, platform, raw)
+        total_raw += len(raw)
+        total_new += size
+        results.append({
+            "command": command, "platform": platform,
+            "raw_chars": len(raw), "output_chars": size,
+            "source": source, "dropped_fields": dropped,
+        })
+    return {
+        "version": __version__,
+        "samples": results,
+        "totals": {
+            "raw_chars": total_raw, "output_chars": total_new,
+            "saved_chars": total_raw - total_new,
+            "reduction_pct": 100 * (1 - total_new / total_raw) if total_raw else 0.0,
+        },
+    }
+
+
+def _compact_capture(args: argparse.Namespace) -> int:
+    """Compact one capture; explanation is metadata on stderr only."""
+    try:
+        if args.path == "-":
+            content = getattr(sys.stdin, "buffer", sys.stdin).read()
+            raw = content.decode("utf-8") if isinstance(content, bytes) else content
+        else:
+            with Path(args.path).open(encoding="utf-8", newline="") as stream:
+                raw = stream.read()
+        if args.input_format == "json":
+            value = json.loads(raw)
+            baseline = value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
+            candidates = render_parsed(value, profile=args.profile)
+            fallback = "json"
+        else:
+            from . import ntc
+
+            rows = ntc.parse(raw, command=args.command, platform=args.platform) if (
+                args.command and args.platform
+            ) else None
+            baseline = raw
+            candidates = render(
+                raw, command=args.command or "", platform=args.platform,
+                parsed=rows, profile=args.profile,
+            )
+            fallback = "raw"
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise SystemExit(f"neterse compact: {exc}") from None
+    eligible = [c for c in candidates if not args.lossless_only or c.dropped_fields == ()]
+    best = min(eligible, key=lambda c: len(c.text), default=None)
+    output = best.text if best is not None else baseline
+    sys.stdout.write(output)
+    if args.explain:
+        print(json.dumps({
+            "source": best.source if best else fallback,
+            "profile": best.profile if best else "default",
+            "dropped_fields": best.dropped_fields if best else [],
+            "raw_chars": len(raw), "output_chars": len(output),
+            "candidates": [
+                {"source": c.source, "chars": len(c.text), "dropped_fields": c.dropped_fields}
+                for c in candidates
+            ],
+        }), file=sys.stderr)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -278,11 +352,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="subcommand", required=True)
 
+    compact = sub.add_parser("compact", help="compact a raw CLI or JSON capture (stdin by default)")
+    compact.add_argument("path", nargs="?", default="-", help="UTF-8 capture file, or - for stdin")
+    compact.add_argument("--command", help="command that produced a raw CLI capture")
+    compact.add_argument("--platform", help="platform used for raw compression and optional TextFSM parsing")
+    compact.add_argument("--input-format", choices=("raw", "json"), default="raw")
+    compact.add_argument("--profile", default="default")
+    compact.add_argument("--lossless-only", action="store_true", help="select only candidates declaring no dropped fields")
+    compact.add_argument("--explain", action="store_true", help="write selection and omission metadata as JSON to stderr")
+
     audit = sub.add_parser(
         "audit",
         help="coverage report over a corpus of (command, platform?, raw) samples",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    audit.add_argument(
+        "--json", action="store_true", help="emit a JSON report without raw capture contents",
     )
     audit.add_argument(
         "paths", nargs="+",
@@ -308,6 +394,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    if args.subcommand == "compact":
+        return _compact_capture(args)
+
     if args.subcommand == "coverage":
         # `neterse coverage | head` closing the pipe early is normal use,
         # not an error. Scoped to the listing ONLY: the audit path's
@@ -324,13 +413,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     samples = load_samples(args.paths, args.command)
-    if not samples:
+    if args.json:
+        report = _audit_json(samples)
+        print(json.dumps(report, indent=2))
+        total_red = report["totals"]["reduction_pct"]
+    elif not samples:
         print("No samples found.")
-        return 0
-    total_red = run_report(samples, show=args.show)
+        total_red = 0.0
+    else:
+        total_red = run_report(samples, show=args.show)
     if args.fail_under is not None and total_red < args.fail_under:
         print(f"\nFAIL: total reduction {total_red:.1f}% "
-              f"< --fail-under {args.fail_under:.1f}%")
+              f"< --fail-under {args.fail_under:.1f}%",
+              file=sys.stderr if args.json else sys.stdout)
         return 1
     return 0
 

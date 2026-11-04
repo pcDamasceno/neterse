@@ -52,10 +52,8 @@ returned — candidates, not policy:
     header, pipe-delimited rows, ``-`` for null vs ``~`` for
     field-absent, JSON-grammar quoting, nested-uniform dict columns
     flattened into quoted ``parent>child`` path columns). Slightly
-    larger than CSV on flat tables, but it distinguishes a missing key
-    from an empty string — which CSV's empty cell conflates — and
-    interoperates with the GCF tooling ecosystem (MCP proxies, decoders
-    in six languages).
+    larger than CSV on flat tables, and interoperates with the GCF
+    tooling ecosystem (MCP proxies and matching decoders).
     Emitted only when every cell is representable in a conforming
     generic-profile table (no array cells, no non-uniform nesting) and
     no profile projection applied, for the same reason as
@@ -75,9 +73,10 @@ SD-WAN / Meraki styles) are turned into canonical rows by
 stays vendor-agnostic: it encodes rows, it does not know who produced them.
 
 Faithfulness: the default profile projects nothing — every key of every
-row appears. JSON ``null`` renders as the bare literal ``null`` and the
-string ``"null"`` is quoted, so null never reads as an empty string
-(decision 46); a key missing from a row renders as an empty cell. Named profiles (:data:`PROFILES`) are declared-lossy field
+row appears. CSV uses JSON literals inside CSV cells, JSON-quoting
+ambiguous strings before CSV escaping (decision 50). Missing keys are
+empty cells; empty strings, nulls, and scalar-looking strings remain
+distinct. Named profiles (:data:`PROFILES`) are declared-lossy field
 projections keyed on field-NAME patterns, because parser schemas differ
 per ecosystem; a profile that matches no fields (or all of them) falls
 back to the complete encoding rather than guess. Applied projections
@@ -162,15 +161,13 @@ _ABSENT = object()
 
 
 def _cell(value: Any) -> str:
-    """One finished CSV cell, quoted where needed.
+    """A typed value inside a standard CSV cell (decision 50).
 
-    Quoting is decided here, while the value's type is still known: JSON
-    null is a value of its own, not an empty string, so an API that says
-    "no tenant" (null) and one that says "tenant named ''" must not render
-    alike (decision 46). null is the bare literal ``null``; the STRING
-    ``"null"`` is quoted so it cannot pass for one. A key ABSENT from a
-    row stays an empty cell — callers pass the ``_ABSENT`` sentinel for
-    it, never None.
+    After CSV decoding, an empty cell means absent; a JSON literal is
+    decoded as JSON; anything else is a string. Strings that could be
+    mistaken for a literal are JSON-quoted *before* CSV escaping. Thus
+    missing, empty string, null, and the string "null" stay distinct even
+    through a standard CSV reader. Nested containers use compact JSON.
     """
     if value is _ABSENT:
         return ""
@@ -180,23 +177,33 @@ def _cell(value: Any) -> str:
         return "true"
     if value is False:
         return "false"
-    if isinstance(value, str):
-        return _quote(value)
-    if isinstance(value, (dict, list, tuple)):
+    if isinstance(value, int):
+        return str(int(value))
+    if isinstance(value, (float, dict, list, tuple)):
         return _quote(json.dumps(value, separators=(",", ":"), default=str))
-    return _quote(str(value))
+    text = value if isinstance(value, str) else str(value)
+    stripped = text.strip()
+    if (
+        not text
+        or stripped in ("null", "true", "false", "NaN", "Infinity", "-Infinity")
+        or _NUMBER_LIKE.fullmatch(stripped)
+        or stripped.startswith(('"', "[", "{"))
+    ):
+        text = json.dumps(text, ensure_ascii=False)
+    return _quote(text)
 
 
 def _quote(s: str) -> str:
-    if "," in s or '"' in s or "\n" in s or s == "null":
+    if "," in s or '"' in s or "\n" in s or "\r" in s:
         return '"' + s.replace('"', '""') + '"'
     return s
 
 
 def _csv_block(items: List[dict], kept: List[str]) -> List[str]:
     """Header-once CSV lines for *items* over the *kept* columns."""
-    return [",".join(_quote(c) for c in kept)] + [
-        ",".join(_cell(row.get(c, _ABSENT)) for c in kept) for row in items
+    return [",".join(_quote(c) for c in kept) or '""'] + [
+        (",".join(_cell(row.get(c, _ABSENT)) for c in kept) or '""')
+        for row in items
     ]
 
 
@@ -329,7 +336,7 @@ def _toon_scalar(value: Any) -> Optional[str]:
         return "false"
     if isinstance(value, (int, float)):
         literal = _number_literal(value)
-        return "null" if literal is None else literal
+        return literal
     if isinstance(value, str):
         return _toon_string(value)
     if isinstance(value, (dict, list, tuple)):
@@ -443,7 +450,7 @@ def _gcf_scalar(value: Any) -> Optional[str]:
         return "false"
     if isinstance(value, (int, float)):
         literal = _number_literal(value)
-        return "-" if literal is None else literal
+        return literal
     if isinstance(value, str):
         return _gcf_string(value)
     if isinstance(value, (dict, list, tuple)):
@@ -796,7 +803,7 @@ def _canonical(value: Any) -> Any:
     return value
 
 
-def _reference_encoded(parsed: Any) -> List[Encoded]:
+def _reference_encoded(parsed: Any, *, exclude: frozenset = frozenset()) -> List[Encoded]:
     """``parsed:toon`` / ``parsed:gcf`` straight from the specs' packages.
 
     Hands over the *normalized rows* when a normalizer claimed the
@@ -805,13 +812,16 @@ def _reference_encoded(parsed: Any) -> List[Encoded]:
     as given, so the encoder can reach for its named-table and envelope
     forms.
     """
+    encoders = [entry for entry in _REFERENCE_ENCODERS if entry[0] not in exclude]
+    if not encoders:
+        return []
     payload = normalizers.normalize(parsed)
     if payload is None:
         payload = parsed
     if not _reference_safe(payload):
         return []
     out: List[Encoded] = []
-    for source, module, encoder, decoder in _REFERENCE_ENCODERS:
+    for source, module, encoder, decoder in encoders:
         try:
             package = import_module(module)
             text = getattr(package, encoder)(payload)
@@ -885,8 +895,7 @@ def encode(parsed: Any, profile: str = "default") -> List[Encoded]:
         # contract change (`render_parsed` promises no candidates) and
         # not what delegation is for.
         already = {source for _, source, _, _ in encoded}
-        encoded.extend(reference for reference in _reference_encoded(parsed)
-                       if reference[1] not in already)
+        encoded.extend(_reference_encoded(parsed, exclude=frozenset(already)))
     sections = _encode_sections(parsed, profile)
     if sections is not None:
         encoded.append(sections)

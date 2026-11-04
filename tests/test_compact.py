@@ -291,6 +291,13 @@ def test_nornir_style_structured_result_routes_to_rows():
     assert compact(Nornirish()) == optimize_parsed(ROWS)
 
 
+def test_response_preserves_all_structured_result_shapes():
+    from types import SimpleNamespace
+
+    for value in ({"hostname": "r1", "status": "down"}, {}, [], [1, 2], 0, False):
+        assert compact(SimpleNamespace(result=value)) == optimize_parsed(value)
+
+
 # ---------------------------------------------------------------------------
 # The adapter extension point
 # ---------------------------------------------------------------------------

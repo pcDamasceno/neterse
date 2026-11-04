@@ -72,8 +72,11 @@ def _response_like(obj: Any) -> Optional[Source]:
             parsed = None
         if _row_shaped(parsed):
             rows = parsed
-    if rows is None and _row_shaped(raw):
-        rows = raw                    # nornir-style: result IS the rows
+    if rows is None and raw is not None and not isinstance(raw, str):
+        # A response may carry a dict, an empty collection, or a scalar.
+        # optimize_parsed owns their JSON fallback; claiming the response
+        # and discarding its result would instead return an empty string.
+        rows = raw
     command = getattr(obj, "channel_input", "")
     platform = getattr(obj, "textfsm_platform", None)
     return Source(

@@ -51,11 +51,10 @@ def _iface_block_header(line: str) -> Optional[str]:
 
 
 def _csv_row(fields: list) -> str:
-    """Join *fields* as one CSV row, quoting only when a field carries a comma
-    or quote (device ``Name`` columns hold spaces but rarely commas)."""
+    """Join *fields* as CSV, escaping commas, quotes, and line breaks."""
     out = []
     for f in fields:
-        if ("," in f) or ('"' in f):
+        if any(char in f for char in (",", '"', "\r", "\n")):
             f = '"' + f.replace('"', '""') + '"'
         out.append(f)
     return ",".join(out)
