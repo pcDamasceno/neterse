@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-11-21
+
+A string is no longer always opaque to the parsed tier: one that is provably
+a TOON object document is read and re-encoded. Nothing changes for any other
+string, or without the `toon` extra.
 
 - `optimize_parsed` given a string now re-encodes it when it is provably a
   TOON object document: the new `neterse.normalizers.toon_document` decodes

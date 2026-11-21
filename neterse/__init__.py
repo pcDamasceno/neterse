@@ -89,7 +89,7 @@ from .registry import (  # noqa: F401  (re-exported)
     register_spec,
 )
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = [
     "Candidate",

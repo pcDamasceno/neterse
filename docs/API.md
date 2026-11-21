@@ -7,7 +7,7 @@
 | `compact(source, command=None, *, platform=None, profile="default", **run_kwargs)` | Raw text, parsed data, a response object, or a synchronous connection | Smallest candidate's text. Raw text passes through when nothing shrinks; structured data falls back to compact JSON. Connection kwargs reach `send_command`. |
 | `render(raw, *, command, platform=None, parsed=None, profile="default")` | Raw CLI text, optionally with pre-parsed rows | A list of shrinking `Candidate` objects; an empty list means use raw text. This function does not run TextFSM itself. |
 | `render_parsed(data, *, profile="default")` | Structured data | Candidates smaller than compact JSON. Strings yield no candidates. |
-| `optimize_parsed(data, *, profile="default")` | Structured data | The smallest parsed candidate or compact JSON; strings pass through. |
+| `optimize_parsed(data, *, profile="default")` | Structured data | The smallest parsed candidate or compact JSON. A string passes through, unless it is provably a TOON object document (`toon` extra): that is read back and re-encoded when the result is smaller (decision 52). |
 | `optimize(command, raw)` | Raw CLI text | Historical convenience wrapper; smallest raw-tier candidate or raw text. |
 
 `compact` runs TextFSM when command and platform are available and the
