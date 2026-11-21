@@ -31,6 +31,10 @@ win without editing this file. Built-ins ship one module per style:
   a JSON string field (infrahub-mcp's ``get_nodes``). The one built-in
   that claims a STRING: the sections encoder offers string values to
   :func:`normalize` too (decision 48).
+  Its sibling :func:`toon_document` reads a bare TOON *object* document
+  (infrahub-mcp's ``get_schema``) and is not in the registry: a document
+  is one object, not rows, and :func:`neterse.optimize_parsed` asks for it
+  directly when it is handed a string (decision 52).
 * :mod:`neterse.normalizers.cisco_aci` — the ACI ``imdata`` object style.
 * :mod:`neterse.normalizers.infrahub` — Infrahub GraphQL ``edges`` lists
   with ``{value}``/``{node}`` field envelopes.
@@ -43,7 +47,7 @@ from __future__ import annotations
 from typing import Any, Callable, List, Optional
 
 from ._generic import keyed_dict
-from ._toon import toon_text
+from ._toon import toon_document, toon_text
 from .cisco_aci import class_attributes
 from .infrahub import graphql_edges
 
@@ -55,6 +59,7 @@ __all__ = [
     "keyed_dict",
     "normalize",
     "register_normalizer",
+    "toon_document",
     "toon_text",
 ]
 

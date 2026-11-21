@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- `optimize_parsed` given a string now re-encodes it when it is provably a
+  TOON object document: the new `neterse.normalizers.toon_document` decodes
+  it with the `toon` extra and accepts the reading only if encoding it again
+  reproduces the string byte for byte (decision 52). Every other string is
+  returned unchanged, as before, and without the extra nothing changes.
+  Measured on infrahub-mcp `get_schema` documents: 14% fewer characters, 5%
+  fewer tokens.
+
 ## 0.7.0 — 2026-11-04
 
 This minor release adds CLI capabilities and intentionally changes parsed CSV

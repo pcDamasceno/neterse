@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from neterse import optimize, render, render_parsed
 
 from .corpus import (
@@ -191,3 +193,33 @@ def test_optimize_is_untouched_by_the_parsed_tier():
             render(IP_INT_BRIEF, command="show ip interface brief"),
             key=lambda c: len(c.text),
         ).text
+
+
+# -- a string that is a TOON object document (decision 52) ---------------------
+
+
+def test_optimize_parsed_re_encodes_a_toon_object_document():
+    pytest.importorskip("toon_format")
+    import toon_format
+
+    from neterse import optimize_parsed
+    from .test_normalizers import TOON_DOCUMENT
+
+    out = optimize_parsed(TOON_DOCUMENT)
+    assert len(out) < len(TOON_DOCUMENT)
+    # Every name and value of the document is still there.
+    document = toon_format.decode(TOON_DOCUMENT)
+    for word in ("InterfaceVirtual", "Virtual Interface", "role", "Dropdown", "mtu", "Number", "tags", "BuiltinTag",
+                 "device", "DcimGenericDevice", "many", "one", "description", "ids", "name__value", "mtu__value",
+                 "String", "Integer", "List"):
+        assert word in out, word
+    assert out.count("BuiltinTag") >= 2 and len(document["relationships"]) == 2
+
+
+def test_optimize_parsed_leaves_every_other_string_alone():
+    from neterse import optimize_parsed
+
+    for text in ("", "plain text", "hostname: r1\nvendor: cisco\n",
+                 "Interface  Status\nEth1       up\nEth2       down\n",
+                 '{"this": "is JSON text, not parsed data"}'):
+        assert optimize_parsed(text) == text
