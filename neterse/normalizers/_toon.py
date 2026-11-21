@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import re
+from importlib import import_module
 from typing import Any, List, Optional
 
 _LIST_HEADER = re.compile(r"^\[(\d+)\]:$")
@@ -152,3 +153,48 @@ def toon_text(value: Any) -> Optional[List[dict]]:
     if not rows or len(rows) != int(match.group(1)):
         return None
     return rows
+
+
+# A line that opens a TOON array: ``key[N]:`` or ``key[N]{fields}:``. A
+# document without one is plain ``key: value`` lines — nothing an encoder
+# here could say in fewer bytes, and easy to confuse with ordinary text.
+_ARRAY_OPENER = re.compile(r"^\s*[^\s:\[\]]*\[\d+\](?:\{[^}]*\})?:", re.MULTILINE)
+
+
+def toon_document(text: Any) -> Optional[dict]:
+    """A bare TOON OBJECT document, read back into the object it encodes.
+
+    Some MCP servers answer with a whole TOON document as the tool result
+    instead of JSON: infrahub-mcp's ``get_schema`` returns ``kind: ...`` /
+    ``attributes[8]{name,kind,optional}:`` / ``relationships[9]:`` with a
+    nested ``peer_schema`` object under every relationship. To a consumer
+    that is one opaque string, so the constant columns inside its tables
+    and the nesting stay unreadable to the parsed tier (decision 52).
+
+    Unlike :func:`toon_text` this does not carry its own reader: nested
+    objects, list items holding objects and tables, quoting and key
+    folding are the whole TOON grammar, and the spec authors' decoder
+    (the ``toon`` extra, ``toon_format``) already implements it. Without
+    the extra this declines every string.
+
+    The reading is proven before it is returned: the decoded object is
+    encoded again and must reproduce *text* byte for byte. A string that
+    merely looks like TOON, a document written by an encoder with other
+    conventions, a duplicate key the decoder merged, a number it
+    normalized — any of these fails the comparison and the string stays a
+    string. Fail-open: ``None`` leaves the caller's text untouched.
+    """
+    if not isinstance(text, str) or "\n" not in text or not _ARRAY_OPENER.search(text):
+        return None
+    try:
+        codec = import_module("toon_format")
+        document = codec.decode(text)
+        if not isinstance(document, dict) or not document:
+            return None
+        if not all(isinstance(key, str) for key in document):
+            return None
+        if codec.encode(document) != text.rstrip("\n"):
+            return None
+    except Exception:
+        return None
+    return document

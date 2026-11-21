@@ -7,6 +7,8 @@ and every built-in shape; a new vendor module adds its cases here.
 """
 from __future__ import annotations
 
+import pytest
+
 from neterse import normalizers
 from neterse.normalizers import (
     class_attributes,
@@ -264,3 +266,77 @@ def test_non_canonical_normalizer_output_is_ignored():
         assert normalize({"x": 1}) is None               # skipped; nothing claims it
     finally:
         normalizers.NORMALIZERS.remove(_bad)
+
+
+# -- a bare TOON object document (decision 52) ---------------------------------
+
+TOON_DOCUMENT = (
+    "kind: InterfaceVirtual\n"
+    "label: Virtual Interface\n"
+    "attributes[3]{name,kind,optional}:\n"
+    "  role,Dropdown,true\n"
+    "  name,Text,false\n"
+    "  mtu,Number,true\n"
+    "relationships[2]:\n"
+    "  - name: tags\n"
+    "    peer: BuiltinTag\n"
+    "    cardinality: many\n"
+    "    optional: true\n"
+    "    peer_schema:\n"
+    "      kind: BuiltinTag\n"
+    "      attributes[2]{name,kind,optional}:\n"
+    "        description,Text,true\n"
+    "        name,Text,false\n"
+    "  - name: device\n"
+    "    peer: DcimGenericDevice\n"
+    "    cardinality: one\n"
+    "    optional: false\n"
+    "    peer_schema:\n"
+    "      kind: DcimGenericDevice\n"
+    "      attributes[2]{name,kind,optional}:\n"
+    "        description,Text,true\n"
+    "        name,Text,false\n"
+    "filters[3]{filter,type}:\n"
+    "  ids,List\n"
+    "  name__value,String\n"
+    "  mtu__value,Integer"
+)
+
+
+def test_toon_document_reads_a_nested_object_document():
+    pytest.importorskip("toon_format")
+    from neterse.normalizers import toon_document
+
+    document = toon_document(TOON_DOCUMENT)
+    assert document["kind"] == "InterfaceVirtual"
+    assert document["attributes"][1] == {"name": "name", "kind": "Text", "optional": False}
+    assert [r["name"] for r in document["relationships"]] == ["tags", "device"]
+    assert document["relationships"][1]["peer_schema"]["kind"] == "DcimGenericDevice"
+    assert document["filters"][2] == {"filter": "mtu__value", "type": "Integer"}
+    assert toon_document(TOON_DOCUMENT + "\n") == document       # a trailing newline is not content
+
+
+def test_toon_document_declines_what_it_cannot_prove():
+    pytest.importorskip("toon_format")
+    from neterse.normalizers import toon_document
+
+    assert toon_document({"kind": "x"}) is None                   # not a string
+    assert toon_document("kind: Tag") is None                     # one line: nothing to gain
+    assert toon_document("hostname: r1\nvendor: cisco\n") is None  # no array: plain key/value text
+    assert toon_document("interface Ethernet1\n   description uplink[1]:\n") is None   # device text
+    assert toon_document("[2]{name}:\n  r1\n  r2") is None        # a root array is rows: toon_text's business
+    # Not the canonical encoding of what it decodes to (extra spaces in a
+    # row): the re-encoding differs, so the string stays a string.
+    assert toon_document(TOON_DOCUMENT.replace("role,Dropdown,true", "role , Dropdown , true")) is None
+    # A count that does not match its rows is not a document at all.
+    assert toon_document(TOON_DOCUMENT.replace("attributes[3]", "attributes[4]", 1)) is None
+
+
+def test_toon_document_needs_the_toon_extra(monkeypatch):
+    from neterse.normalizers import _toon
+
+    def missing(name):
+        raise ImportError(name)
+
+    monkeypatch.setattr(_toon, "import_module", missing)
+    assert _toon.toon_document(TOON_DOCUMENT) is None

@@ -89,7 +89,7 @@ from .registry import (  # noqa: F401  (re-exported)
     register_spec,
 )
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = [
     "Candidate",
@@ -371,10 +371,18 @@ def optimize_parsed(parsed: Any, *, profile: str = "default") -> str:
     """Smallest faithful text for already-parsed output: the best
     parsed-tier encoding, or the compact JSON of *parsed* when nothing
     undercuts it. Strings return unchanged (netmiko's no-template
-    fallback hands back raw text — compact that with :func:`optimize`).
+    fallback hands back raw text — compact that with :func:`optimize`),
+    with one exception: a string that is provably a TOON object document
+    (:func:`neterse.normalizers.toon_document`, needs the ``toon`` extra)
+    is read back into its object and re-encoded, and the result is
+    returned only when it is smaller than the string (decision 52).
     """
     if isinstance(parsed, str):
-        return parsed
+        document = _normalizers.toon_document(parsed)
+        if document is None:
+            return parsed
+        encoded = optimize_parsed(document, profile=profile)
+        return encoded if len(encoded) < len(parsed) else parsed
     baseline = _parsed_baseline(parsed)
     if baseline is None:
         # Not JSON-encodable at all (circular refs, a value whose
