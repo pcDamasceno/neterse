@@ -7,6 +7,10 @@ command: 'show\s+(?:ip\s+)?bgp\s+summary'
 platforms: 'ios|xe|xr|nx'
 strategy: line_regex_table
 #      1: neighbor   (skip V)   2: AS   (skip msg fields)   3: state/pfxrcd
-row: '^(\d+\.\d+\.\d+\.\d+)\s+\d+\s+(\d+)\s+.*?\s+(\S+)\s*$'
+#
+# The state keeps its reason (`Idle (Admin)`, `Idle (PfxCt)`), and the
+# router-id line carries the local AS that tells eBGP from iBGP peers.
+row: '^(\d+\.\d+\.\d+\.\d+)\s+\d+\s+(\d+)\s+.*?\s+(\S+(?:\s+\(\w+\))?)\s*$'
 header: neighbor,as,state_pfxrcd
+context_prefixes: ['BGP router identifier']
 dropped_fields: [version, msgrcvd, msgsent, tblver, inq, outq, up_down]

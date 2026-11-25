@@ -143,27 +143,43 @@ def _compress_transceiver_inventory(raw: str) -> str:
 # show port-channel summary (NX-OS)
 # ---------------------------------------------------------------------------
 
+_MEMBER_PORT_RE = re.compile(r"^\S+\(\w+\)$")
+
+
 def _compress_portchannel_summary(raw: str) -> str:
-    """``show port-channel summary`` (NX-OS) → CSV. The ~10-line static Flags
-    legend and dashed separators are pure boilerplate and dropped."""
-    rows = ["group,port_channel,type,protocol,member_ports"]
+    """``show port-channel summary`` (NX-OS) / ``show etherchannel summary``
+    (IOS) → CSV. The ~10-line static Flags legend and dashed separators are
+    pure boilerplate and dropped. Long member lists wrap onto indented
+    lines, which join their row; IOS prints no Type column, so its cell
+    stays empty. Any other indented line after the first row returns the
+    raw output rather than lose it."""
+    entries: list = []
+    has_type = True
     for line in raw.splitlines():
         s = line.strip()
         if not s or set(s) <= {"-"}:
             continue
         toks = s.split()
+        if toks[0] == "Group":
+            has_type = "Type" in toks
+            continue
         if (
             toks[0].isdigit()
             and len(toks) >= 2
             and re.match(r"^(?:po|port-channel)\d", toks[1], re.IGNORECASE)
         ):
-            group, po = toks[0], toks[1]
-            typ = toks[2] if len(toks) > 2 else ""
-            proto = toks[3] if len(toks) > 3 else ""
-            members = " ".join(toks[4:]) if len(toks) > 4 else ""
-            rows.append(_csv_row([group, po, typ, proto, members]))
-    if len(rows) < 2:
+            rest = toks[2:] if has_type else [""] + toks[2:]
+            typ = rest[0] if rest else ""
+            proto = rest[1] if len(rest) > 1 else ""
+            entries.append([toks[0], toks[1], typ, proto, rest[2:]])
+        elif entries and line[:1].isspace():
+            if not all(_MEMBER_PORT_RE.match(t) for t in toks):
+                return raw
+            entries[-1][4].extend(toks)
+    if not entries:
         return raw
+    rows = ["group,port_channel,type,protocol,member_ports"]
+    rows.extend(_csv_row(entry[:4] + [" ".join(entry[4])]) for entry in entries)
     return "\n".join(rows)
 
 

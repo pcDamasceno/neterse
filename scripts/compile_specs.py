@@ -65,7 +65,7 @@ STRATEGY_KEYS: Dict[str, Dict[str, set]] = {
     },
     "fixed_width_table": {
         "required": {"keywords", "header"},
-        "optional": {"row_match", "first_col_wraps", "profiles"},
+        "optional": {"row_match", "first_col_wraps", "strict_rows", "profiles"},
     },
     # kv_extract takes no header and (engine-enforced) no profiles.
     "kv_extract": {
@@ -256,6 +256,11 @@ def validate(path: Path, data: Any) -> Dict[str, Any]:
         if "first_col_wraps" in spec:
             _require(isinstance(spec["first_col_wraps"], bool), path,
                      "first_col_wraps must be a boolean")
+        if "strict_rows" in spec:
+            _require(isinstance(spec["strict_rows"], bool), path,
+                     "strict_rows must be a boolean")
+            _require(not (spec["strict_rows"] and spec.get("first_col_wraps")), path,
+                     "strict_rows cannot be combined with first_col_wraps")
 
     else:  # kv_extract
         fields = spec.get("fields")

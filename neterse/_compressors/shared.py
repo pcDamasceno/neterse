@@ -138,7 +138,7 @@ def _compress_interfaces(raw: str) -> str:
 def _compress_running_config(raw: str) -> str:
     lines = raw.splitlines()
     out: list = []
-    skip_banners = False
+    banner_end: Optional[str] = None
     for line in lines:
         stripped = line.strip()
         # Skip empty lines, comments, timestamps, building-config notice
@@ -150,16 +150,22 @@ def _compress_running_config(raw: str) -> str:
             continue
         if stripped.startswith("Current configuration"):
             continue
-        if stripped.startswith("end"):
+        if stripped == "end":
             continue
         # Collapse banner blocks
         if stripped.startswith("banner "):
             out.append(stripped.split("\n")[0] + " ...")
-            skip_banners = True
+            words = stripped.split(None, 2)
+            text = words[2] if len(words) > 2 else ""
+            # IOS shows the delimiter as ^C, NX-OS keeps the one typed (often
+            # #), EOS has none and closes the body with a bare EOF line.
+            delim = text[:2] if text.startswith("^C") else text[:1]
+            if not (delim and delim in text[len(delim):]):   # else one-line banner
+                banner_end = delim or "EOF"
             continue
-        if skip_banners:
-            if stripped in ("^C", "EOF", "^"):
-                skip_banners = False
+        if banner_end is not None:
+            if banner_end in stripped or stripped in ("^C", "EOF", "^"):
+                banner_end = None
             continue
         out.append(line.rstrip())
     if not out:

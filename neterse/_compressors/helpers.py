@@ -25,7 +25,7 @@ from typing import Optional, Tuple
 # a header, legend or continuation line in a fixed-width table.
 _IFACE_NAME_RE = re.compile(
     r"^(?:mgmt|eth(?:ernet)?|po(?:rt-channel)?|vlan|lo(?:opback)?|nve|"
-    r"tun(?:nel)?|gi\w*|te\w*|twe\w*|fo\w*|hu\w*|fa\w*)\d",
+    r"tun(?:nel)?|gi\w*|te\w*|tw\w*|fi\w*|ap\w*|fo\w*|hu\w*|fa\w*)\d",
     re.IGNORECASE,
 )
 
@@ -82,7 +82,26 @@ def _header_positions(lines: list, keywords: list) -> "Tuple[Optional[list], int
     return None, 0
 
 
-def _fixed_width_rows(raw: str, keywords: list, name_re: Optional[re.Pattern] = None) -> Optional[list]:
+def _cells(line: str, positions: list) -> list:
+    """Slice *line* at the header's column offsets. A value wider than its
+    header is right-aligned into the column before it (IOS ``a-1000``
+    starts one character left of ``Speed``), so a cut that lands inside
+    a word moves left to where that word starts."""
+    cuts = list(positions)
+    for k in range(1, len(cuts)):
+        while (
+            cuts[k - 1] < cuts[k] < len(line)
+            and not line[cuts[k] - 1].isspace()
+            and not line[cuts[k]].isspace()
+        ):
+            cuts[k] -= 1
+    cuts.append(10 ** 6)
+    return [line[cuts[k]:cuts[k + 1]].strip() for k in range(len(positions))]
+
+
+def _fixed_width_rows(
+    raw: str, keywords: list, name_re: Optional[re.Pattern] = None, strict: bool = False
+) -> Optional[list]:
     """Parse a fixed-width table whose columns start at the ``keywords`` header.
 
     NX-OS status/brief tables pad columns and let a ``Name`` / ``Reason`` field
@@ -94,6 +113,13 @@ def _fixed_width_rows(raw: str, keywords: list, name_re: Optional[re.Pattern] = 
     e.g. Arista ``Et1`` or Aruba ``1/1/1``, pass their own via the spec's
     ``row_match`` key) are kept. Returns ``None`` when the header is absent
     (caller falls back to raw).
+
+    ``strict`` (the spec's ``strict_rows``) is for outputs that print other
+    tables beside this one (NX-OS ``show interface brief``: mgmt0 above,
+    Port-channel, Loopback and Vlan below, each under its own header). An
+    interface-shaped line before the header, or any line after the first
+    row that is not a row, belongs to another table this header cannot
+    slice, so the whole output is returned raw instead (``None``).
     """
     if name_re is None:
         name_re = _IFACE_NAME_RE
@@ -101,15 +127,21 @@ def _fixed_width_rows(raw: str, keywords: list, name_re: Optional[re.Pattern] = 
     positions, start = _header_positions(lines, keywords)
     if not positions:
         return None
-    bounds = positions + [10 ** 6]
+    if strict and any(
+        line.split() and name_re.match(line.split()[0]) for line in lines[:start - 1]
+    ):
+        return None
     rows: list = []
     for line in lines[start:]:
         if not line.strip() or set(line.strip()) <= {"-"}:
             continue
-        head = line[bounds[0]:bounds[1]].split()
+        cells = _cells(line, positions)
+        head = cells[0].split()
         if not head or not name_re.match(head[0]):
+            if strict and rows:
+                return None
             continue
-        rows.append([line[bounds[k]:bounds[k + 1]].strip() for k in range(len(positions))])
+        rows.append(cells)
     return rows
 
 
@@ -128,7 +160,6 @@ def _wrapped_first_col_rows(raw: str, keywords: list, name_re: re.Pattern) -> Op
     positions, start = _header_positions(lines, keywords)
     if not positions:
         return None
-    bounds = positions + [10 ** 6]
     rows: list = []
     pending: Optional[str] = None
     for line in lines[start:]:
@@ -138,7 +169,7 @@ def _wrapped_first_col_rows(raw: str, keywords: list, name_re: re.Pattern) -> Op
         if " " not in stripped and name_re.match(stripped):
             pending = stripped        # wrapped first column; columns follow
             continue
-        cols = [line[bounds[k]:bounds[k + 1]].strip() for k in range(len(positions))]
+        cols = _cells(line, positions)
         if not any(cols[1:]):
             continue
         if not cols[0]:

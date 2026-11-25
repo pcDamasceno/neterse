@@ -1,3 +1,4 @@
+BGP router identifier 22.2.2.2, local AS number 200
 neighbor,as,state_pfxrcd
 192.168.12.1,100,2
 192.168.23.3,200,2

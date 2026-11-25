@@ -36,6 +36,10 @@ Strategies:
     line (IOS ``show cdp neighbors`` device IDs); rows are re-joined via
     ``_compressors._wrapped_first_col_rows``, with ``row_match``
     defaulting to a single-token pattern instead of interface names.
+    ``strict_rows`` (not with ``first_col_wraps``) declines the whole
+    output when it also holds rows of another table: an interface line
+    before the header, or a non-row line after the first row (NX-OS
+    ``show interface brief`` prints one table per interface type).
 
 ``kv_extract`` (Phase 2)
     First-match field scan → one ``key=value | key=value`` line. Spec
@@ -181,6 +185,7 @@ def _fixed_width_table(
         if spec.get("row_match") else None
     )
     first_col_wraps = bool(spec.get("first_col_wraps"))
+    strict_rows = bool(spec.get("strict_rows"))
 
     def _compress(raw: str) -> str:
         if first_col_wraps:
@@ -188,7 +193,7 @@ def _fixed_width_table(
                 raw, keywords, name_re or re.compile(r"^\S+$")
             )
         else:
-            rows = _fixed_width_rows(raw, keywords, name_re)
+            rows = _fixed_width_rows(raw, keywords, name_re, strict_rows)
         if not rows:
             return raw
         out = [header]

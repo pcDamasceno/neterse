@@ -65,10 +65,12 @@ def test_int_brief_keeps_admin_down_status_whole():
 def test_bgp_summary_keeps_the_real_as_per_neighbor():
     """Decision 24: the legacy regex rendered the V column (constant 4)
     under the "as" header — on this capture (r2, BGP lab) that made the
-    eBGP neighbor (AS 100) indistinguishable from the iBGP ones (AS 200)."""
+    eBGP neighbor (AS 100) indistinguishable from the iBGP ones (AS 200).
+    Decision 53: the local AS that makes them iBGP is kept above the table."""
     raw = _body("cisco_ios/show_ip_bgp_summary")
     out = optimize("show ip bgp summary", raw)
     assert out.splitlines() == [
+        "BGP router identifier 22.2.2.2, local AS number 200",
         "neighbor,as,state_pfxrcd",
         "192.168.12.1,100,2",
         "192.168.23.3,200,2",

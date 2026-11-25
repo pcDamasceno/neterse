@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+Five raw-tier compressors no longer return wrong output that they declared
+lossless (decision 53).
+
+- `show running-config` keeps every line after a one-line banner or an
+  NX-OS banner closed with `#`, and keeps lines that start with `end`, such
+  as `endpoint-tracker` and `end-policy`.
+- Fixed-width tables keep right-aligned values whole, so IOS
+  `show interfaces status` reports `a-full` and `a-1000` instead of
+  `a-full a` and `-1000`. `Tw`, `Fi` and `Ap` ports are no longer dropped.
+- NX-OS `show interface brief` with more than the Ethernet table returns
+  the raw output instead of rows cut at the wrong columns. Spec authors can
+  set `strict_rows` on `fixed_width_table` specs.
+- `show port-channel summary` keeps wrapped member ports, and IOS
+  `show etherchannel summary` no longer shifts its columns.
+- `show ip bgp summary` keeps the state reason (`Idle (Admin)`) and the
+  `BGP router identifier ..., local AS number ...` line. This changes its
+  output.
+
 ## 0.8.0 — 2026-11-21
 
 A string is no longer always opaque to the parsed tier: one that is provably

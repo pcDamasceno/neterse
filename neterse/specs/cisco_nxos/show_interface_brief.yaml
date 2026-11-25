@@ -5,6 +5,10 @@ platforms: 'nx'
 strategy: fixed_width_table
 keywords: [Ethernet, VLAN, Type, Mode, Status, Reason, Speed, Port]
 header: interface,vlan,type,mode,status,reason,speed,port_ch
+# The full command also prints mgmt0 above this table and Port-channel,
+# Loopback and Vlan tables below it, each under its own header; sliced at
+# the Ethernet offsets they come out wrong, so such output stays raw.
+strict_rows: true
 dropped_fields: []
 profiles:
   updown:

@@ -106,8 +106,9 @@ SPECS: list = [
         'command': 'show\\s+(?:ip\\s+)?bgp\\s+summary',
         'platforms': 'ios|xe|xr|nx',
         'strategy': 'line_regex_table',
-        'row': '^(\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+\\d+\\s+(\\d+)\\s+.*?\\s+(\\S+)\\s*$',
+        'row': '^(\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+\\d+\\s+(\\d+)\\s+.*?\\s+(\\S+(?:\\s+\\(\\w+\\))?)\\s*$',
         'header': 'neighbor,as,state_pfxrcd',
+        'context_prefixes': ['BGP router identifier'],
         'dropped_fields': ('version', 'msgrcvd', 'msgsent', 'tblver', 'inq', 'outq', 'up_down'),
     },
     {
@@ -234,6 +235,7 @@ SPECS: list = [
         'strategy': 'fixed_width_table',
         'keywords': ['Ethernet', 'VLAN', 'Type', 'Mode', 'Status', 'Reason', 'Speed', 'Port'],
         'header': 'interface,vlan,type,mode,status,reason,speed,port_ch',
+        'strict_rows': True,
         'dropped_fields': (),
         'profiles': {
             'updown': {"keep": ['interface', 'status', 'reason']},

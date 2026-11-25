@@ -88,6 +88,7 @@ regex can't parse these tables). Fails open when no header or no rows.
 | `header` | yes | The emitted CSV header (comma-separated string, same rules as above). |
 | `row_match` | no | Regex the first column of a data row must match. Default: the shared Cisco interface-name pattern — vendors with other port-name shapes declare their own (Arista `'^Et'`, Aruba `'^\d+/\d+/\d+'`). |
 | `first_col_wraps` | no | Boolean: the first column's value may overflow its width and wrap onto its own line (IOS `show cdp neighbors` device IDs); rows are re-joined, and `row_match` defaults to a single-token pattern instead of interface names. |
+| `strict_rows` | no | Boolean, not with `first_col_wraps`: the output may hold other tables under their own headers (NX-OS `show interface brief`). A line before the header whose first word passes the row gate, or a line after the first data row that does not, makes the whole compressor return raw input, because this header's offsets cannot slice another table. |
 
 ## `kv_extract`
 
