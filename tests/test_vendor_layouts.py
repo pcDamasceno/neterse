@@ -8,7 +8,9 @@ capture, so a real capture should replace it when one is available.
 """
 from __future__ import annotations
 
-from neterse import render
+import pytest
+
+from neterse import compact, render
 
 
 def _text(raw: str, command: str, platform: str, source: str):
@@ -148,6 +150,17 @@ def test_nxos_brief_with_other_tables_stays_raw():
     for raw in (below, above):
         assert _text(raw, "show interface brief", "cisco_nxos",
                      "spec:cisco_nxos/show_interface_brief") is None
+
+
+def test_nxos_brief_with_other_tables_is_read_by_the_textfsm_extra():
+    """The spec declines the full output, but ntc-templates reads every
+    table, so ``neterse[textfsm]`` still compacts it with every interface."""
+    pytest.importorskip("ntc_templates", reason="needs the `textfsm` extra")
+    raw = "\n".join(MGMT_TABLE + ETHERNET_TABLE + LOOPBACK_TABLE) + "\n"
+    out = compact(raw, "show interface brief", platform="cisco_nxos")
+    assert len(out) < len(raw)
+    for name in ("mgmt0", "Eth1/1", "Eth1/2", "Lo0", "XCVR not inserted"):
+        assert name in out
 
 
 # -- port-channel / etherchannel summary ---------------------------------------
