@@ -22,7 +22,9 @@ from __future__ import annotations
 import pytest
 
 from neterse import render_parsed
-from neterse.parsed import _columns, _gcf_encoded, _reference_encoded, encode
+from neterse.parsed import (
+    _columns, _gcf_encoded, _reference_encoded, _toon_encoded, encode,
+)
 
 gcf = pytest.importorskip("gcf", reason="needs the `gcf` extra")
 toon_format = pytest.importorskip("toon_format", reason="needs the `toon` extra")
@@ -86,6 +88,20 @@ def test_shapes_we_can_encode_stay_ours_byte_for_byte():
     ours = _gcf_encoded(ROWS, _columns(ROWS), ())
     assert _encoded(ROWS)["parsed:gcf"] == ours[0]
     assert ours[0].rstrip("\n") == gcf.encode_generic(ROWS).rstrip("\n")
+
+
+@pytest.mark.parametrize("value", [
+    "05", "007", "+1", "-05", "00.5", "-2.31 dBm", ".5", "-05abc",
+    "0x1F", "1.5k", "5.", "80", "-1",
+])
+def test_number_like_strings_quote_exactly_as_the_reference_does(value):
+    """Decision 54: the stdlib encoders quote by the reference encoders' own
+    rules (toon-format also quotes "05" and "+1"; gcf-python anything that
+    starts like a signed or zero-padded number), so the bytes match."""
+    rows = [{"v": value, "w": "a"}, {"v": "b", "w": "c"}]
+    cols = _columns(rows)
+    assert _toon_encoded(rows, cols, ())[0] == toon_format.encode(rows).rstrip("\n")
+    assert _gcf_encoded(rows, cols, ())[0] == gcf.encode_generic(rows).rstrip("\n")
 
 
 def test_a_bare_dict_stays_a_one_row_table():

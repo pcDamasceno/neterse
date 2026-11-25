@@ -313,7 +313,13 @@ def _compact_raw(
     )
     if not candidates:
         return raw
-    return min(candidates, key=lambda c: len(c.text)).text
+    best = min(candidates, key=lambda c: len(c.text))
+    logger.debug(
+        "TOON compressed '%s' via %s: %d -> %d chars (%.0f%% reduction)",
+        command, best.source, len(raw), len(best.text),
+        100 * (1 - len(best.text) / len(raw)),
+    )
+    return best.text
 
 
 def _parsed_baseline(parsed: Any) -> Optional[str]:
@@ -321,7 +327,7 @@ def _parsed_baseline(parsed: Any) -> Optional[str]:
     honest competitor when no raw text exists to gate against. ``None``
     when *parsed* can't even be JSON-encoded (fail-open)."""
     try:
-        return json.dumps(parsed, separators=(",", ":"), default=str)
+        return json.dumps(parsed, separators=(",", ":"), default=str, ensure_ascii=False)
     except Exception:
         return None
 
@@ -411,17 +417,4 @@ def optimize(command: str, raw_output: str) -> str:
     fail-open: an exception or a non-shrinking result simply drops it from the
     running, so the original output is never lost.
     """
-    if not raw_output:
-        return raw_output
-    best: Optional[Candidate] = None
-    for candidate in render(raw_output, command=command):
-        if best is None or len(candidate.text) < len(best.text):
-            best = candidate
-    if best is None:
-        return raw_output
-    saved = 100 * (1 - len(best.text) / len(raw_output))
-    logger.debug(
-        "TOON compressed '%s' via %s: %d -> %d chars (%.0f%% reduction)",
-        command, best.source, len(raw_output), len(best.text), saved,
-    )
-    return best.text
+    return _compact_raw(raw_output, command, None, None, "default")

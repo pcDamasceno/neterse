@@ -29,7 +29,8 @@ for servers you author. Three surfaces over one pure core:
 
 Everything not claimed passes through byte-identical: non-JSON text (the
 raw tier is keyed on a CLI command string MCP does not carry — per-tool
-hints are the recorded next step), JSON scalars, ``isError`` results,
+hints are the recorded next step) other than a provable TOON object
+document (decision 52, read with the ``toon`` extra), JSON scalars, ``isError`` results,
 non-text blocks, and ``tools/list``. ``structuredContent`` gets one
 carve-out: FastMCP mirrors every tool return there, so a copy that
 merely DUPLICATES the compacted text block follows it (the
@@ -53,6 +54,7 @@ import sys
 from typing import Any, List, Optional
 
 from . import compact as _compact
+from . import optimize_parsed as _optimize_parsed
 
 __all__ = ["CompactMiddleware", "compact_result", "compact_text", "main"]
 
@@ -64,7 +66,10 @@ def compact_text(text: str, *, max_chars: Optional[int] = None) -> str:
     re-encode to themselves and prose that happens to parse (``null``, a
     bare number) must never be touched. The decoded structure goes
     through :func:`neterse.compact`; the result replaces *text* only when
-    strictly smaller. Everything else — non-JSON, scalars, a compaction
+    strictly smaller. Text that is not JSON goes to
+    :func:`neterse.optimize_parsed`, which re-encodes only a provable TOON
+    object document (infrahub-mcp ``get_schema``, decision 52) and returns
+    any other string unchanged. Everything else — scalars, a compaction
     that did not win — returns *text* unchanged.
     ``max_chars`` optionally skips oversized blocks without truncating.
     """
@@ -73,8 +78,14 @@ def compact_text(text: str, *, max_chars: Optional[int] = None) -> str:
     if max_chars is not None and len(text) > max_chars:
         return text
     stripped = text.strip()
-    if not stripped or stripped[0] not in "[{":
+    if not stripped:
         return text
+    if stripped[0] not in "[{":
+        try:
+            rendered = _optimize_parsed(text)
+        except Exception:                         # fails open like compact()
+            return text
+        return rendered if len(rendered) < len(text) else text
     try:
         decoded = json.loads(stripped)
     except Exception:

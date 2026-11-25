@@ -180,7 +180,7 @@ def _cell(value: Any) -> str:
     if isinstance(value, int):
         return str(int(value))
     if isinstance(value, (float, dict, list, tuple)):
-        return _quote(json.dumps(value, separators=(",", ":"), default=str))
+        return _quote(json.dumps(value, separators=(",", ":"), default=str, ensure_ascii=False))
     text = value if isinstance(value, str) else str(value)
     stripped = text.strip()
     if (
@@ -263,6 +263,11 @@ _GCF_BARE_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 # A string a decoder would read back as a number — must be quoted to stay
 # a string (JSON number grammar, both specs).
 _NUMBER_LIKE = re.compile(r"^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$")
+# Wider rules the reference encoders quote by, so our bytes match theirs:
+# toon-format also quotes "05" and "+1"; gcf-python also quotes any string
+# that starts like a signed or leading-zero number ("-2.31 dBm", ".5").
+_TOON_NUMERIC_LIKE = re.compile(r"^[+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$")
+_GCF_NUMERIC_LIKE = re.compile(r"^[+-]\.?[0-9]|^\.[0-9]|^0[0-9]")
 # C0 + DEL + C1: both specs require these escaped inside quoted strings.
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _TOON_UNSAFE = re.compile(r'[:"\\\[\]{}]')
@@ -315,7 +320,7 @@ def _toon_string(s: str) -> str:
         not s
         or s != s.strip()
         or s in ("true", "false", "null")
-        or _NUMBER_LIKE.match(s)
+        or _TOON_NUMERIC_LIKE.match(s)
         or "," in s
         or _TOON_UNSAFE.search(s)
         or _CONTROL_CHARS.search(s)
@@ -419,6 +424,7 @@ def _gcf_string(s: str) -> str:
         or s != s.strip()
         or s in ("-", "~", "^", "true", "false")
         or _NUMBER_LIKE.match(s)
+        or _GCF_NUMERIC_LIKE.match(s)
         or "|" in s
         or '"' in s
         or "\\" in s
@@ -546,11 +552,7 @@ def _project(cols: List[str], profile: str) -> Tuple[List[str], Tuple[str, ...]]
 
 
 def _table_csv(items: List[dict], profile: str) -> Tuple[List[str], Tuple[str, ...]]:
-    cols = _columns(items)
-    if profile == "default":
-        kept, dropped = cols, ()
-    else:
-        kept, dropped = _project(cols, profile)
+    kept, dropped = _project(_columns(items), profile)
     lines = _csv_block(items, kept)
     fold = _fold_constants(items, kept)
     if fold is not None:
@@ -600,11 +602,7 @@ def _table_lines(
     if not any_nested:
         return _table_csv(items, profile)
 
-    cols = _columns(flats)
-    if profile == "default":
-        kept, dropped = cols, ()
-    else:
-        kept, dropped = _project(cols, profile)
+    kept, dropped = _project(_columns(flats), profile)
     dropped_all: List[str] = list(dropped)
     prefix: List[str] = []
     fold = _fold_constants(flats, kept)
@@ -636,7 +634,7 @@ def _table_lines(
 def _section_label(key: str) -> str:
     if re.match(r"^[A-Za-z_][A-Za-z0-9_.-]*$", key):
         return key
-    return json.dumps(key, separators=(",", ":"))
+    return json.dumps(key, separators=(",", ":"), ensure_ascii=False)
 
 
 def _section_lines(
@@ -675,7 +673,7 @@ def _section_lines(
                 if field not in dropped_fields:
                     dropped_fields.append(field)
             continue
-        encoded = json.dumps(value, separators=(",", ":"), default=str)
+        encoded = json.dumps(value, separators=(",", ":"), default=str, ensure_ascii=False)
         lines.append(f"{indent}{label}:{encoded}")
     return lines, dropped_fields
 
@@ -854,10 +852,7 @@ def encode(parsed: Any, profile: str = "default") -> List[Encoded]:
     if items is not None:
         cols = _columns(items)
         if cols:
-            if profile == "default":
-                kept, dropped = cols, ()
-            else:
-                kept, dropped = _project(cols, profile)
+            kept, dropped = _project(cols, profile)
             applied = profile if dropped else "default"
 
             csv_lines = _csv_block(items, kept)

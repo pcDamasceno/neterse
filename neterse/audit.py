@@ -304,7 +304,9 @@ def _compact_capture(args: argparse.Namespace) -> int:
                 raw = stream.read()
         if args.input_format == "json":
             value = json.loads(raw)
-            baseline = value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
+            baseline = value if isinstance(value, str) else json.dumps(
+                value, separators=(",", ":"), ensure_ascii=False
+            )
             candidates = render_parsed(value, profile=args.profile)
             fallback = "json"
         else:

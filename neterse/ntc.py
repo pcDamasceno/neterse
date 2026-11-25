@@ -136,9 +136,4 @@ def optimize(command: str, raw_output: str, *, platform: str) -> str:
     """Smallest candidate across BOTH tiers (ntc-parsed included), or
     *raw_output* unchanged — :func:`neterse.optimize` with the parser in
     the loop."""
-    if not raw_output:
-        return raw_output
-    candidates = render(raw_output, command=command, platform=platform)
-    if not candidates:
-        return raw_output
-    return min(candidates, key=lambda c: len(c.text)).text
+    return neterse._compact_raw(raw_output, command, platform, None, "default")

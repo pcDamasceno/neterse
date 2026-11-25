@@ -83,6 +83,26 @@ def test_non_json_text_is_untouched():
     assert compact_text(RAW_CLI) is RAW_CLI
 
 
+def test_a_bare_toon_document_is_read_through_the_seam():
+    """Decision 54: decision 52's case (infrahub-mcp get_schema) arrives as
+    a text block that is not JSON, so the proxy must reach the same reader
+    optimize_parsed uses, and the FastMCP string mirror must follow."""
+    pytest.importorskip("toon_format", reason="needs the `toon` extra")
+    from neterse import optimize_parsed
+
+    from .test_normalizers import TOON_DOCUMENT
+
+    expected = optimize_parsed(TOON_DOCUMENT)
+    assert len(expected) < len(TOON_DOCUMENT)
+    assert compact_text(TOON_DOCUMENT) == expected
+    result = compact_result({
+        "content": [{"type": "text", "text": TOON_DOCUMENT}],
+        "structuredContent": {"result": TOON_DOCUMENT},
+    })
+    assert result["content"][0]["text"] == expected
+    assert result["structuredContent"] == {"result": expected}
+
+
 def test_json_scalars_are_never_claimed():
     for scalar in ("null", "42", '"hello"', "true", "  3.14  "):
         assert compact_text(scalar) is scalar

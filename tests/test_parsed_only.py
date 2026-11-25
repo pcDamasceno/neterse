@@ -556,3 +556,12 @@ def test_an_ordinary_string_field_is_not_mistaken_for_a_table():
     payload = {"note": "[1] see the footnote", "rows": [{"a": 1}, {"a": 2}]}
     sections = next(c for c in render_parsed(payload) if c.source == "parsed:sections")
     assert sections.text.splitlines()[0] == 'note:"[1] see the footnote"'
+
+
+def test_the_json_fallback_keeps_non_ascii_text_unescaped():
+    """Decision 54: compact JSON is the text a consumer would otherwise
+    send; \\u escapes make non-ASCII names longer and cost more tokens."""
+    assert optimize_parsed(["Zürich", "Genève"]) == '["Zürich","Genève"]'
+    rows = [{"site": "Zürich", "meta": {"city": "Genève"}},
+            {"site": "Genève", "meta": {"city": "Zürich"}}]
+    assert "\\u" not in "".join(text for text, _, _, _ in encode(rows))

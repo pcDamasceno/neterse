@@ -20,6 +20,20 @@ lossless (decision 53).
   `BGP router identifier ..., local AS number ...` line. This changes its
   output.
 
+Smaller fixes and removals (decision 54):
+
+- `neterse-mcp` and `CompactMiddleware` now re-encode a tool result that
+  is a bare TOON object document (infrahub-mcp `get_schema`), as
+  `optimize_parsed` has done since 0.8.0. Needs the `toon` extra.
+- `parsed:toon` and `parsed:gcf` quote number-like strings by the
+  reference encoders' rules (`"05"`, `"+1"`, `"-2.31 dBm"` in GCF), so
+  their bytes match `toon-format` and `gcf-python`. Decoded values do not
+  change.
+- The compact-JSON fallback and JSON-encoded cells keep non-ASCII
+  characters instead of writing `\uXXXX` escapes.
+- Removed `scripts/validate_napalm.py`, which no document, test or CI job
+  used and whose check no longer matched the parsed CSV format.
+
 ## 0.8.0 — 2026-11-21
 
 A string is no longer always opaque to the parsed tier: one that is provably
